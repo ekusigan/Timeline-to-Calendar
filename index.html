@@ -1,0 +1,1655 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timeline to Calendar - Googleマップタイムライン変換ツール</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Leaflet CSS & JS for Interactive Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        #map, #googleMapIframeContainer {
+            height: 100%;
+            min-height: 400px;
+            border-radius: 1rem;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col relative">
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-indigo-600 text-white p-2.5 rounded-xl shadow-md flex items-center justify-center">
+                    <i data-lucide="calendar-range" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-slate-900 text-lg leading-tight">Timeline to Calendar</h1>
+                    <p class="text-xs text-slate-500">Googleマップの移動履歴をGoogleカレンダー用 `.ics` へ一括変換</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="loadSampleData()" class="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 border border-indigo-200">
+                    <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-600"></i>
+                    サンプルデータをロード
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Sidebar: Settings & Upload Controls -->
+        <div class="lg:col-span-4 space-y-5">
+
+            <!-- File Upload Card -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-3">
+                <h2 class="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                    <i data-lucide="upload-cloud" class="w-4 h-4 text-indigo-600"></i>
+                    データ読み込み (JSON / KML)
+                </h2>
+                
+                <!-- Instructions Step Card (Accordion) -->
+                <details class="text-[11px] text-slate-600 bg-indigo-50/60 p-3 rounded-xl border border-indigo-100 cursor-pointer group">
+                    <summary class="font-semibold text-indigo-900 hover:underline flex items-center justify-between list-none">
+                        <span class="flex items-center gap-1.5">
+                            <i data-lucide="smartphone" class="w-3.5 h-3.5 text-indigo-600"></i>
+                            スマホアプリからのデータ出力・取得手順
+                        </span>
+                        <i data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform group-open:rotate-180 text-indigo-600"></i>
+                    </summary>
+                    <ol class="list-decimal list-inside space-y-1 text-[11px] leading-relaxed text-slate-700 font-medium mt-2 pt-2 border-t border-indigo-100">
+                        <li>アプリ上で「<span class="font-bold text-slate-900">・・・</span>」➔「<span class="font-bold text-slate-900">位置情報とプライバシーの設定</span>」をクリック</li>
+                        <li>「<span class="font-bold text-slate-900">タイムライン データをエクスポート</span>」➔「<span class="font-bold text-slate-900">その他</span>」➔「<span class="font-bold text-slate-900">Googleドライブ</span>」を選択</li>
+                        <li>「<span class="font-bold text-slate-900">フォルダ</span>」➔「<span class="font-bold text-slate-900">タイムライン</span>」➔「<span class="font-bold text-slate-900">ここに保存</span>」を選択</li>
+                        <li>ダウンロードしたファイル (<code class="bg-white px-1.5 py-0.5 rounded border border-indigo-200 text-indigo-800 font-mono font-semibold">location-history.json</code>) を選択</li>
+                    </ol>
+                </details>
+
+                <!-- Drag & Drop Zone -->
+                <div id="dropZone" onclick="document.getElementById('fileInput').click()" 
+                     class="border-2 border-dashed border-slate-300 hover:border-indigo-500 bg-slate-50 hover:bg-indigo-50/40 rounded-xl p-5 text-center cursor-pointer transition-all">
+                    <input type="file" id="fileInput" accept=".json,.kml" onchange="handleFileSelect(event)" class="hidden">
+                    <div class="flex flex-col items-center gap-2 text-slate-500">
+                        <i data-lucide="file-json" class="w-8 h-8 text-indigo-500"></i>
+                        <span class="text-xs font-medium text-slate-700">ファイルをドロップ または 参照</span>
+                        <span class="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 font-medium">💡 保存先例: G:\マイドライブ\タイムライン\location-history.json</span>
+                    </div>
+                </div>
+
+                <!-- File Parsing Progress UI Bar -->
+                <div id="parseProgressContainer" class="hidden bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+                    <div class="flex items-center justify-between text-xs">
+                        <span id="parseProgressText" class="font-semibold text-indigo-700 flex items-center gap-1.5">
+                            <i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i>
+                            データを処理中...
+                        </span>
+                        <span id="parseProgressPercent" class="font-mono text-slate-600 font-bold text-xs">0%</span>
+                    </div>
+                    <!-- Progress Bar Track -->
+                    <div class="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                        <div id="parseProgressBar" class="bg-indigo-600 h-2.5 rounded-full transition-all duration-200" style="width: 0%"></div>
+                    </div>
+                    <p id="parseProgressSubtext" class="text-[10px] text-slate-500 truncate">ファイルを読み込んでいます...</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                <h3 class="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                    <i data-lucide="sliders" class="w-4 h-4 text-indigo-600"></i>
+                    表示・抽出フィルター
+                </h3>
+
+                <!-- Filter Checkboxes & Date Range Inputs -->
+                <div class="space-y-3 text-xs">
+                    <div class="space-y-2">
+                        <label class="flex items-center gap-2 text-slate-700 cursor-pointer">
+                            <input type="checkbox" id="filterPlaces" checked onchange="applyFilters()" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                            <span class="font-medium">訪問場所（店舗・施設・公園など）を含める</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-slate-700 cursor-pointer">
+                            <input type="checkbox" id="filterActivities" checked onchange="applyFilters()" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                            <span class="font-medium">移動アクティビティ（徒歩・車・電車など）を含める</span>
+                        </label>
+                    </div>
+
+                    <!-- Date Quick Selector & Range Controls -->
+                    <div class="pt-2 border-t border-slate-100 space-y-2">
+                        <label class="block text-xs font-semibold text-slate-700">日付で絞り込み</label>
+                        <select id="dateQuickSelect" onchange="onQuickDateSelect(this.value)" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                            <option value="">-- データに含まれる日付から選択 --</option>
+                        </select>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-[10px] text-slate-400 block mb-0.5">開始日</label>
+                                <input type="date" id="filterStartDate" onchange="applyFilters()" class="w-full text-xs p-1.5 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-400 block mb-0.5">終了日</label>
+                                <input type="date" id="filterEndDate" onchange="applyFilters()" class="w-full text-xs p-1.5 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                            </div>
+                        </div>
+                        <div class="flex justify-end">
+                            <button type="button" onclick="clearDateFilter()" class="text-[11px] text-slate-500 hover:text-indigo-600 underline">日付指定をクリア</button>
+                        </div>
+                    </div>
+
+                    <!-- Gemini API Key Input -->
+                    <div class="pt-2 border-t border-slate-100 space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <label for="apiKeyInput" class="block text-xs font-semibold text-slate-700 flex items-center gap-1">
+                                <i data-lucide="key-round" class="w-3.5 h-3.5 text-indigo-600"></i>
+                                Gemini API Key
+                            </label>
+                            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="text-[10px] text-indigo-600 hover:underline flex items-center gap-0.5">
+                                無料キーを取得 <i data-lucide="external-link" class="w-2.5 h-2.5"></i>
+                            </a>
+                        </div>
+                        <input type="password" id="apiKeyInput" placeholder="AIzaSy..." onchange="saveApiKey(this.value)" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono">
+                        
+                        <!-- Quick Accordion for Getting API Key -->
+                        <details class="text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200 cursor-pointer group">
+                            <summary class="font-medium text-indigo-700 hover:underline flex items-center justify-between list-none">
+                                <span class="flex items-center gap-1">
+                                    <i data-lucide="help-circle" class="w-3.5 h-3.5 text-indigo-600"></i>
+                                    💡 APIキーの簡単取得手順（1分で完了）
+                                </span>
+                                <i data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform group-open:rotate-180"></i>
+                            </summary>
+                            <ol class="list-decimal list-inside space-y-1 mt-2 pl-1 text-[10.5px] text-slate-600 leading-relaxed border-t border-slate-200 pt-2">
+                                <li>上の「無料キーを取得」リンクから Google AI Studio にアクセス。</li>
+                                <li>「Create API key」をクリックしてキーを発行。</li>
+                                <li>発行されたキーをコピーし、上記に入力します。</li>
+                            </ol>
+                        </details>
+                        <p class="text-[10px] text-slate-400">※ 入力されたキーはブラウザ (localStorage) にのみ安全に保存されます。</p>
+                    </div>
+                </div>
+
+                <hr class="border-slate-100">
+
+                <!-- Place ID Auto Resolve Feature -->
+                <div class="bg-amber-50/80 p-3.5 rounded-xl border border-amber-200 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                            <i data-lucide="search-code" class="w-4 h-4 text-amber-600"></i>
+                            場所名・Place ID の補完・高精度置換
+                        </span>
+                        <span id="placeIdCountBadge" class="text-[10px] bg-amber-200/80 text-amber-900 font-semibold px-2 py-0.5 rounded-full">0 件検出</span>
+                    </div>
+                    <p class="text-[11px] text-amber-800 leading-relaxed">
+                        ※ 「自宅」「会社」などの登録場所は自動判別され保護されます。
+                    </p>
+                    
+                    <div class="grid grid-cols-1 gap-2 pt-1">
+                        <!-- Gemini AI + Search Grounding -->
+                        <button id="resolvePlaceNamesBtn" onclick="resolvePlaceNamesWithAI()" disabled class="w-full py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-slate-300 text-white font-semibold text-xs rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-sm">
+                            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                            Gemini AI (位置＋Web検索) で店名特定
+                        </button>
+                    </div>
+                </div>
+
+                <hr class="border-slate-100">
+
+                <!-- AI Behavior Summary Generation Card (Moved here) -->
+                <div class="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-4 rounded-xl shadow-sm space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-bold text-xs flex items-center gap-1.5 text-indigo-200">
+                            <i data-lucide="bot" class="w-3.5 h-3.5 text-indigo-400"></i>
+                            Gemini AI 行動サマリー生成
+                        </h3>
+                        <span class="text-[9px] bg-indigo-800/80 text-indigo-300 px-1.5 py-0.5 rounded-full border border-indigo-700">AI Assistant</span>
+                    </div>
+                    <p class="text-[11px] text-slate-300 leading-relaxed">
+                        選択された期間のタイムライン情報から、わかりやすい1日の振り返り日記やサマリーを作成します。作成すると `.ics` エクスポート時に終日イベントとして自動追加されます。
+                    </p>
+                    <button id="aiSummaryBtn" onclick="generateAISummary()" disabled class="w-full py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-slate-700 text-white font-medium text-xs rounded-lg transition-all flex items-center justify-center gap-1.5">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                        AIで日記・行動サマリーを作成
+                    </button>
+
+                    <!-- AI Output Box -->
+                    <div id="aiResultContainer" class="hidden mt-2 bg-slate-800/90 rounded-xl p-3 border border-indigo-500/30 text-xs text-slate-200 space-y-2">
+                        <div class="flex items-center justify-between text-[11px] text-indigo-300 border-b border-slate-700 pb-1.5">
+                            <span class="font-semibold flex items-center gap-1">
+                                <i data-lucide="message-square-text" class="w-3.5 h-3.5"></i> AI生成サマリー
+                            </span>
+                            <button onclick="copyAiText()" class="hover:text-white flex items-center gap-1">
+                                <i data-lucide="copy" class="w-3 h-3"></i> コピー
+                            </button>
+                        </div>
+                        <div id="aiResultText" class="whitespace-pre-wrap leading-relaxed text-[11px] text-slate-200 max-h-48 overflow-y-auto custom-scrollbar"></div>
+                    </div>
+                </div>
+
+                <!-- Export Action -->
+                <div class="pt-1">
+                    <div class="flex items-center justify-between text-xs text-slate-500 mb-2">
+                        <span>対象イベント件数:</span>
+                        <span id="exportCountBadge" class="font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">0 件</span>
+                    </div>
+                    <button id="exportIcsBtn" onclick="exportICS()" disabled class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-semibold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                        iCalendar (.ics) ファイルの保存
+                    </button>
+                    <!-- Google Calendar Shortcut Button -->
+                    <a href="https://calendar.google.com/calendar/r/settings/export" target="_blank" rel="noopener noreferrer" class="w-full py-2 mt-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-200">
+                        <i data-lucide="calendar" class="w-3.5 h-3.5 text-indigo-600"></i>
+                        Googleカレンダーを開く (インポート画面)
+                        <i data-lucide="external-link" class="w-3 h-3 text-slate-400"></i>
+                    </a>
+                    <p class="text-[10px] text-slate-400 mt-2 text-center">
+                        ※保存した `.ics` は Google カレンダーの「設定 ➔ インポート」から取り込めます。
+                    </p>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="lg:col-span-8 flex flex-col space-y-5">
+
+            <!-- Interactive Map Container with Mode Toggle -->
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h2 class="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                        <i data-lucide="map-pin" class="w-4 h-4 text-indigo-600"></i>
+                        マッププレビュー
+                    </h2>
+                    
+                    <div class="flex items-center gap-2">
+                        <!-- Map Toggle Tabs -->
+                        <div class="bg-slate-100 p-0.5 rounded-lg flex items-center text-xs">
+                            <button id="mapTabLeaflet" onclick="switchMapMode('leaflet')" class="px-2.5 py-1 rounded-md font-semibold transition-all bg-white text-indigo-600 shadow-sm">
+                                全ピン表示 (Leaflet)
+                            </button>
+                            <button id="mapTabGoogle" onclick="switchMapMode('google')" class="px-2.5 py-1 rounded-md font-medium text-slate-600 hover:text-slate-900 transition-all">
+                                Googleマップ埋め込み
+                            </button>
+                        </div>
+                        <span id="activeCountBadge" class="text-xs text-slate-500">データ未選択</span>
+                    </div>
+                </div>
+
+                <!-- Leaflet Interactive Map -->
+                <div id="map" class="w-full"></div>
+
+                <!-- Google Maps Embedded iframe Container -->
+                <div id="googleMapIframeContainer" class="hidden w-full overflow-hidden border border-slate-200 rounded-xl bg-slate-50 relative">
+                    <iframe id="googleMapIframe" class="w-full h-full min-h-[400px] border-0" loading="lazy" allowfullscreen src="about:blank"></iframe>
+                    <div id="googleMapOverlayNotice" class="absolute bottom-2 left-2 bg-white/90 backdrop-blur px-2.5 py-1 rounded-md text-[10px] text-slate-600 shadow border border-slate-200">
+                        ※ リストの地点を選択するとGoogleマップの埋め込み位置が切り替わります
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timeline Event Cards List -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                        <i data-lucide="list-ordered" class="w-4 h-4 text-indigo-600"></i>
+                        タイムライン抽出ログ一覧 (昇順: 古い ➔ 新しい)
+                    </h2>
+                    <span class="text-xs text-slate-400">クリックすると地図の位置へジャンプします</span>
+                </div>
+
+                <!-- Scrollable Event Items -->
+                <div id="timelineContainer" class="space-y-3 overflow-y-auto max-h-[450px] pr-1 custom-scrollbar flex-1">
+                    <!-- Empty Placeholder State -->
+                    <div id="emptyState" class="text-center py-12 px-4 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                        <i data-lucide="map" class="w-10 h-10 text-slate-300 mx-auto mb-3"></i>
+                        <h3 class="text-sm font-semibold text-slate-700">データが読み込まれていません</h3>
+                        <p class="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                            左側のフォームから Google タイムラインの JSON/KML ファイルを選択するか、「サンプルデータをロード」をクリックしてください。
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Modal Dialog for Input Prompt -->
+    <div id="modalOverlay" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in duration-150">
+            <h3 id="modalTitle" class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <i data-lucide="key" class="w-4 h-4 text-indigo-600"></i>
+                <span id="modalTitleText">入力が必要です</span>
+            </h3>
+            <p id="modalMessage" class="text-xs text-slate-600 leading-relaxed"></p>
+            <input type="text" id="modalInput" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono">
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeModal(false)" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors">キャンセル</button>
+                <button onclick="closeModal(true)" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors">確定</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global Application State
+        let rawEvents = [];
+        let filteredEvents = [];
+        let leafletMap = null;
+        let mapMarkers = [];
+        let mapPolyline = null;
+        let currentMapMode = 'leaflet';
+        let selectedEventForGoogleMap = null;
+        let modalResolver = null;
+
+        // Sample Demonstration Data
+        const SAMPLE_DATA = [
+            {
+                id: "ev-1",
+                type: "PLACE",
+                title: "星乃珈琲店 渋谷店",
+                address: "東京都渋谷区神南1丁目22-8",
+                startTime: new Date("2026-08-09T09:15:00"),
+                endTime: new Date("2026-08-09T10:45:00"),
+                lat: 35.6605,
+                lng: 139.7005,
+                category: "カフェ・朝食",
+                confidence: "HIGH"
+            },
+            {
+                id: "ev-2",
+                type: "ACTIVITY",
+                title: "徒歩で移動",
+                activityType: "WALKING",
+                startTime: new Date("2026-08-09T10:45:00"),
+                endTime: new Date("2026-08-09T11:05:00"),
+                distanceMeters: 1200,
+                lat: 35.6620,
+                lng: 139.6980
+            },
+            {
+                id: "ev-3",
+                type: "PLACE",
+                title: "代々木公園",
+                address: "東京都渋谷区代々木神園町2-1",
+                startTime: new Date("2026-08-09T11:05:00"),
+                endTime: new Date("2026-08-09T13:30:00"),
+                lat: 35.6717,
+                lng: 139.6949,
+                category: "公園・散策",
+                confidence: "HIGH"
+            },
+            {
+                id: "ev-4",
+                type: "ACTIVITY",
+                title: "電車移動 (山手線)",
+                activityType: "IN_TRAIN",
+                startTime: new Date("2026-08-09T13:40:00"),
+                endTime: new Date("2026-08-09T14:10:00"),
+                distanceMeters: 6500,
+                lat: 35.6895,
+                lng: 139.7004
+            },
+            {
+                id: "ev-5",
+                type: "PLACE",
+                title: "新宿御苑",
+                address: "東京都新宿区内内藤町11",
+                startTime: new Date("2026-08-09T14:15:00"),
+                endTime: new Date("2026-08-09T16:30:00"),
+                lat: 35.6852,
+                lng: 139.7101,
+                category: "観光地",
+                confidence: "HIGH"
+            }
+        ];
+
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            initMap();
+            setupDropZone();
+            initApiKeyInput();
+        });
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            if (!container) return;
+
+            const toast = document.createElement('div');
+            const bgClass = type === 'error' ? 'bg-red-600 text-white' : type === 'success' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-white';
+            
+            toast.className = `${bgClass} px-4 py-3 rounded-xl shadow-lg text-xs font-medium flex items-center justify-between gap-3 pointer-events-auto transform transition-all duration-300 translate-y-2 opacity-0`;
+            toast.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <i data-lucide="${type === 'error' ? 'alert-circle' : type === 'success' ? 'check-circle' : 'info'}" class="w-4 h-4 shrink-0"></i>
+                    <span>${escapeHtml(message)}</span>
+                </div>
+            `;
+
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        function showPromptModal(title, message, defaultValue = '') {
+            return new Promise((resolve) => {
+                const overlay = document.getElementById('modalOverlay');
+                const titleText = document.getElementById('modalTitleText');
+                const msgEl = document.getElementById('modalMessage');
+                const inputEl = document.getElementById('modalInput');
+
+                titleText.textContent = title;
+                msgEl.textContent = message;
+                inputEl.value = defaultValue;
+                overlay.classList.remove('hidden');
+                inputEl.focus();
+
+                modalResolver = resolve;
+            });
+        }
+
+        function closeModal(confirmed) {
+            const overlay = document.getElementById('modalOverlay');
+            const inputEl = document.getElementById('modalInput');
+            overlay.classList.add('hidden');
+
+            if (modalResolver) {
+                modalResolver(confirmed ? inputEl.value.trim() : null);
+                modalResolver = null;
+            }
+        }
+
+        function getApiKey() {
+            return localStorage.getItem('gemini_api_key') || document.getElementById('apiKeyInput')?.value?.trim() || '';
+        }
+
+        function saveApiKey(key) {
+            if (key) {
+                localStorage.setItem('gemini_api_key', key.trim());
+            } else {
+                localStorage.removeItem('gemini_api_key');
+            }
+        }
+
+        function initApiKeyInput() {
+            const savedKey = localStorage.getItem('gemini_api_key');
+            const input = document.getElementById('apiKeyInput');
+            if (input && savedKey) {
+                input.value = savedKey;
+            }
+        }
+
+        function initMap() {
+            leafletMap = L.map('map').setView([35.6812, 139.7671], 12);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(leafletMap);
+        }
+
+        function switchMapMode(mode) {
+            currentMapMode = mode;
+            const leafletTab = document.getElementById('mapTabLeaflet');
+            const googleTab = document.getElementById('mapTabGoogle');
+            const mapContainer = document.getElementById('map');
+            const googleIframeContainer = document.getElementById('googleMapIframeContainer');
+
+            if (mode === 'google') {
+                leafletTab.className = "px-2.5 py-1 rounded-md font-medium text-slate-600 hover:text-slate-900 transition-all";
+                googleTab.className = "px-2.5 py-1 rounded-md font-semibold transition-all bg-white text-indigo-600 shadow-sm";
+                mapContainer.classList.add('hidden');
+                googleIframeContainer.classList.remove('hidden');
+                renderGoogleMapIframe();
+            } else {
+                googleTab.className = "px-2.5 py-1 rounded-md font-medium text-slate-600 hover:text-slate-900 transition-all";
+                leafletTab.className = "px-2.5 py-1 rounded-md font-semibold transition-all bg-white text-indigo-600 shadow-sm";
+                googleIframeContainer.classList.add('hidden');
+                mapContainer.classList.remove('hidden');
+                if (leafletMap) {
+                    leafletMap.invalidateSize();
+                }
+            }
+        }
+
+        function renderGoogleMapIframe(ev = null) {
+            const iframe = document.getElementById('googleMapIframe');
+            if (!iframe) return;
+
+            let targetEv = ev || selectedEventForGoogleMap || (filteredEvents.length > 0 ? filteredEvents[0] : null);
+            if (targetEv && targetEv.lat && targetEv.lng) {
+                const query = encodeURIComponent(`${targetEv.lat},${targetEv.lng}`);
+                iframe.src = `https://maps.google.com/maps?q=${query}&z=15&output=embed`;
+            } else {
+                iframe.src = `https://maps.google.com/maps?q=35.6812,139.7671&z=12&output=embed`;
+            }
+        }
+
+        function setupDropZone() {
+            const dropZone = document.getElementById('dropZone');
+            if (!dropZone) return;
+
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => dropZone.classList.add('bg-indigo-100/50', 'border-indigo-500'), false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => dropZone.classList.remove('bg-indigo-100/50', 'border-indigo-500'), false);
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files.length) {
+                    handleFile(files[0]);
+                }
+            });
+        }
+
+        function handleFileSelect(e) {
+            if (!e || !e.target) return;
+            const file = e.target.files[0];
+            if (file) handleFile(file);
+        }
+
+        function showProgress(text, subtext, percent) {
+            const container = document.getElementById('parseProgressContainer');
+            const textEl = document.getElementById('parseProgressText');
+            const subtextEl = document.getElementById('parseProgressSubtext');
+            const percentEl = document.getElementById('parseProgressPercent');
+            const barEl = document.getElementById('parseProgressBar');
+
+            if (container) container.classList.remove('hidden');
+            if (textEl) textEl.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> ${escapeHtml(text)}`;
+            if (subtextEl) subtextEl.textContent = subtext;
+            if (percentEl) percentEl.textContent = `${Math.min(100, Math.max(0, Math.round(percent)))}%`;
+            if (barEl) barEl.style.width = `${Math.min(100, Math.max(0, percent))}%`;
+            lucide.createIcons();
+        }
+
+        function hideProgress() {
+            const container = document.getElementById('parseProgressContainer');
+            if (container) container.classList.add('hidden');
+        }
+
+        function handleFile(file) {
+            showProgress("ファイルを読み込み中...", `${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`, 10);
+            
+            const reader = new FileReader();
+
+            reader.onprogress = (event) => {
+                if (event.lengthComputable) {
+                    const loadedPercent = Math.min(40, (event.loaded / event.total) * 40);
+                    showProgress("ファイルを読み込み中...", `読み込み完了: ${(event.loaded / (1024 * 1024)).toFixed(1)} MB`, loadedPercent);
+                }
+            };
+
+            reader.onload = async (event) => {
+                const content = event.target.result;
+                try {
+                    showProgress("データ構造のパース準備中...", "大容量データをスキャンしています", 45);
+                    await new Promise(r => setTimeout(r, 50));
+
+                    if (file.name.toLowerCase().endsWith('.json')) {
+                        await parseSemanticJsonAsync(content);
+                    } else if (file.name.toLowerCase().endsWith('.kml')) {
+                        parseKML(content);
+                    } else {
+                        showToast('サポートされていないファイル形式です。.json または .kml をお使いください。', 'error');
+                        hideProgress();
+                    }
+                } catch (err) {
+                    console.error("Parse Error:", err);
+                    showToast("ファイルのパースに失敗しました。ファイルが破損しているか未対応のデータ形式です。", 'error');
+                    hideProgress();
+                }
+            };
+
+            reader.onerror = () => {
+                showToast("ファイルの読み込み中にエラーが発生しました。", 'error');
+                hideProgress();
+            };
+
+            reader.readAsText(file);
+        }
+
+        async function parseSemanticJsonAsync(jsonText) {
+            let data;
+            
+            try {
+                data = JSON.parse(jsonText);
+            } catch (e) {
+                console.warn("JSON parse error, attempting auto-repair...", e);
+                data = tryRepairTruncatedJson(jsonText);
+                if (!data) {
+                    showToast("JSONファイルの解析に失敗しました。ファイルが途中で切れている可能性があります。", 'error');
+                    hideProgress();
+                    return;
+                }
+            }
+
+            let rawArray = [];
+            if (Array.isArray(data)) {
+                rawArray = data;
+            } else if (data.timelineObjects && Array.isArray(data.timelineObjects)) {
+                rawArray = data.timelineObjects;
+            } else if (data.semanticSegments && Array.isArray(data.semanticSegments)) {
+                rawArray = data.semanticSegments;
+            } else if (data.locations && Array.isArray(data.locations)) {
+                rawArray = data.locations;
+            } else {
+                const firstArrayKey = Object.keys(data).find(k => Array.isArray(data[k]));
+                if (firstArrayKey) rawArray = data[firstArrayKey];
+                else rawArray = [data];
+            }
+
+            if (!Array.isArray(rawArray) || rawArray.length === 0) {
+                showToast("有効なタイムラインデータが見つかりませんでした。", 'error');
+                hideProgress();
+                return;
+            }
+
+            const parsedEvents = [];
+            const totalCount = rawArray.length;
+            const chunkSize = 200;
+
+            showProgress("タイムライン要素を抽出中...", `全 ${totalCount} 件の項目を分析中`, 50);
+
+            for (let idx = 0; idx < totalCount; idx++) {
+                const obj = rawArray[idx];
+                if (!obj) continue;
+
+                if (obj.visit) {
+                    const v = obj.visit;
+                    const top = v.topCandidate || {};
+                    const coords = parseGeoUri(top.placeLocation);
+                    const startTime = parseDateTime(obj.startTime || v.duration?.startTimestamp);
+                    const endTime = parseDateTime(obj.endTime || v.duration?.endTimestamp);
+
+                    if (startTime && endTime) {
+                        let placeName = top.semanticType && top.semanticType !== 'Unknown' 
+                            ? top.semanticType 
+                            : (top.placeID ? top.placeID : '訪問場所');
+                        placeName = normalizeProtectedName(placeName);
+                        const isPlaceId = isPlaceIdString(placeName) || isPlaceIdString(top.placeID);
+
+                        parsedEvents.push({
+                            id: `json-v-${idx}`,
+                            type: 'PLACE',
+                            title: placeName,
+                            placeId: top.placeID || '',
+                            isPlaceIdOnly: isPlaceId,
+                            address: '',
+                            startTime: startTime,
+                            endTime: endTime,
+                            lat: coords ? coords.lat : (top.latitudeE7 ? top.latitudeE7 / 1e7 : 35.6812),
+                            lng: coords ? coords.lng : (top.longitudeE7 ? top.longitudeE7 / 1e7 : 139.7671),
+                            confidence: v.probability || 'UNKNOWN'
+                        });
+                    }
+                } else if (obj.activity) {
+                    const act = obj.activity;
+                    const top = act.topCandidate || {};
+                    const startCoords = parseGeoUri(act.start);
+                    const startTime = parseDateTime(obj.startTime || act.duration?.startTimestamp);
+                    const endTime = parseDateTime(obj.endTime || act.duration?.endTimestamp);
+                    const actType = top.type ? formatActivityType(top.type) : '移動';
+
+                    if (startTime && endTime) {
+                        parsedEvents.push({
+                            id: `json-act-${idx}`,
+                            type: 'ACTIVITY',
+                            title: `移動 (${actType})`,
+                            activityType: top.type || 'MOVE',
+                            startTime: startTime,
+                            endTime: endTime,
+                            distanceMeters: parseFloat(act.distanceMeters || 0),
+                            lat: startCoords ? startCoords.lat : 35.6812,
+                            lng: startCoords ? startCoords.lng : 139.7671
+                        });
+                    }
+                } else if (obj.placeVisit) {
+                    const pv = obj.placeVisit;
+                    const location = pv.location || {};
+                    const startMs = parseInt(pv.duration?.startTimestampMs || pv.duration?.startTimestamp || 0);
+                    const endMs = parseInt(pv.duration?.endTimestampMs || pv.duration?.endTimestamp || 0);
+
+                    const lat = (location.latitudeE7) ? location.latitudeE7 / 1e7 : (location.latitude || 0);
+                    const lng = (location.longitudeE7) ? location.longitudeE7 / 1e7 : (location.longitude || 0);
+
+                    let titleName = location.name || location.address || location.placeId || '不特定の訪問場所';
+                    titleName = normalizeProtectedName(titleName);
+                    const isPlaceId = isPlaceIdString(titleName) || isPlaceIdString(location.placeId);
+
+                    if (startMs && endMs) {
+                        parsedEvents.push({
+                            id: `json-pv-${idx}`,
+                            type: 'PLACE',
+                            title: titleName,
+                            placeId: location.placeId || '',
+                            isPlaceIdOnly: isPlaceId,
+                            address: location.address || '',
+                            startTime: new Date(startMs),
+                            endTime: new Date(endMs),
+                            lat: lat || 35.6812,
+                            lng: lng || 139.7671,
+                            confidence: pv.visitConfidence || 'UNKNOWN'
+                        });
+                    }
+                } else if (obj.activitySegment) {
+                    const act = obj.activitySegment;
+                    const startMs = parseInt(act.duration?.startTimestampMs || act.duration?.startTimestamp || 0);
+                    const endMs = parseInt(act.duration?.endTimestampMs || act.duration?.endTimestamp || 0);
+                    const startLat = (act.startLocation?.latitudeE7) ? act.startLocation.latitudeE7 / 1e7 : 0;
+                    const startLng = (act.startLocation?.longitudeE7) ? act.startLocation.longitudeE7 / 1e7 : 0;
+
+                    if (startMs && endMs) {
+                        parsedEvents.push({
+                            id: `json-legacy-act-${idx}`,
+                            type: 'ACTIVITY',
+                            title: `移動 (${act.activityType || '移動'})`,
+                            activityType: act.activityType || 'MOVE',
+                            startTime: new Date(startMs),
+                            endTime: new Date(endMs),
+                            distanceMeters: act.distance || 0,
+                            lat: startLat || 35.6812,
+                            lng: startLng || 139.7671
+                        });
+                    }
+                }
+
+                if (idx % chunkSize === 0 || idx === totalCount - 1) {
+                    const currentPercent = 50 + Math.round((idx / totalCount) * 48);
+                    showProgress("タイムライン要素を抽出中...", `処理中: ${idx + 1} / ${totalCount} 件`, currentPercent);
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+
+            rawEvents = parsedEvents;
+            showProgress("画面を更新中...", `${rawEvents.length} 件のイベントを読み込みました`, 100);
+            await new Promise(r => setTimeout(r, 300));
+            
+            hideProgress();
+            updateDateQuickSelectOptions();
+            applyFilters();
+            showToast(`${rawEvents.length} 件のデータログを読み込みました`, 'success');
+        }
+
+        function normalizeProtectedName(str) {
+            if (!str || typeof str !== 'string') return str;
+            const trimmed = str.trim();
+            const upper = trimmed.toUpperCase();
+            if (upper === 'HOME' || upper === 'MY HOME' || upper === 'MY_HOME' || upper === 'HOME_ADDRESS') return '自宅';
+            if (upper === 'WORK' || upper === 'MY WORK' || upper === 'MY_WORK' || upper === 'WORK_ADDRESS') return '会社';
+            return trimmed;
+        }
+
+        function isProtectedLocation(str) {
+            if (!str || typeof str !== 'string') return false;
+            const normalized = normalizeProtectedName(str);
+            if (normalized === '自宅' || normalized === '会社') return true;
+            const upper = str.toUpperCase().trim();
+            const protectedKeywords = ['HOME', 'WORK', '自宅', '会社', '職場', 'MY HOME', 'MY WORK', 'MY_HOME', 'MY_WORK'];
+            return protectedKeywords.some(k => upper === k || upper.includes('HOME') || upper.includes('自宅') || upper.includes('WORK') || upper.includes('会社'));
+        }
+
+        function isPlaceIdString(str) {
+            if (!str || typeof str !== 'string') return false;
+            if (isProtectedLocation(str)) return false;
+            
+            const isChIJ = str.startsWith('ChIJ');
+            const isRawCoords = /^geo:-?\d+\.\d+/i.test(str);
+            const isUnknownLabel = str === '訪問場所' || str === 'Unknown' || str === '不特定の訪問場所';
+            const isLongHash = str.length > 20 && !str.includes(' ') && !str.includes('店') && !str.includes('駅') && !str.includes('公園');
+
+            return isChIJ || isRawCoords || isUnknownLabel || isLongHash;
+        }
+
+        function parseGeoUri(geoUriStr) {
+            if (!geoUriStr || typeof geoUriStr !== 'string') return null;
+            const match = geoUriStr.match(/geo:(-?\d+\.\d+),(-?\d+\.\d+)/);
+            if (match) {
+                return {
+                    lat: parseFloat(match[1]),
+                    lng: parseFloat(match[2])
+                };
+            }
+            return null;
+        }
+
+        function parseDateTime(val) {
+            if (!val) return null;
+            const d = new Date(val);
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        function formatActivityType(type) {
+            const map = {
+                'walking': '徒歩',
+                'in passenger vehicle': '車（乗車）',
+                'cycling': '自転車',
+                'in train': '電車',
+                'running': 'ランニング',
+                'still': '滞在/停止'
+            };
+            return map[type] || type;
+        }
+
+        function tryRepairTruncatedJson(str) {
+            let trimmed = str.trim().replace(/,\s*$/, '');
+            const suffixesToTry = ['}]', '}}]', '}]}', '}]}]', '"}]}'];
+            for (let suffix of suffixesToTry) {
+                try {
+                    return JSON.parse(trimmed + suffix);
+                } catch (e) {}
+            }
+            return null;
+        }
+
+        function parseKML(kmlText) {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(kmlText, "text/xml");
+            const placemarks = xmlDoc.getElementsByTagName("Placemark");
+            const parsedEvents = [];
+
+            for (let i = 0; i < placemarks.length; i++) {
+                const p = placemarks[i];
+                let name = p.getElementsByTagName("name")[0]?.textContent || `地点 #${i+1}`;
+                name = normalizeProtectedName(name);
+                const coordsText = p.getElementsByTagName("coordinates")[0]?.textContent || "";
+
+                if (coordsText) {
+                    const parts = coordsText.trim().split(",");
+                    if (parts.length >= 2) {
+                        const lng = parseFloat(parts[0]);
+                        const lat = parseFloat(parts[1]);
+                        const now = new Date();
+                        parsedEvents.push({
+                            id: `kml-${i}`,
+                            type: 'PLACE',
+                            title: name,
+                            address: '',
+                            startTime: new Date(now.getTime() + i * 3600000),
+                            endTime: new Date(now.getTime() + (i + 1) * 3600000),
+                            lat: lat,
+                            lng: lng
+                        });
+                    }
+                }
+            }
+
+            rawEvents = parsedEvents;
+            updateDateQuickSelectOptions();
+            applyFilters();
+            showToast(`${rawEvents.length} 件のKMLデータを読み込みました`, 'success');
+        }
+
+        function loadSampleData() {
+            rawEvents = [...SAMPLE_DATA];
+            updateDateQuickSelectOptions();
+            applyFilters();
+            showToast('サンプルデータをロードしました', 'info');
+        }
+
+        function updateDateQuickSelectOptions() {
+            const select = document.getElementById('dateQuickSelect');
+            if (!select) return;
+
+            select.innerHTML = '<option value="">-- データに含まれる日付から選択 --</option>';
+            if (rawEvents.length === 0) return;
+
+            const dateMap = new Map();
+            rawEvents.forEach(ev => {
+                if (ev.startTime && !isNaN(ev.startTime)) {
+                    const year = ev.startTime.getFullYear();
+                    const month = String(ev.startTime.getMonth() + 1).padStart(2, '0');
+                    const day = String(ev.startTime.getDate()).padStart(2, '0');
+                    const ymd = `${year}-${month}-${day}`;
+                    dateMap.set(ymd, (dateMap.get(ymd) || 0) + 1);
+                }
+            });
+
+            const sortedDates = Array.from(dateMap.keys()).sort((a, b) => b.localeCompare(a));
+            sortedDates.forEach(dateStr => {
+                const count = dateMap.get(dateStr);
+                const opt = document.createElement('option');
+                opt.value = dateStr;
+                opt.textContent = `${dateStr} (${count}件のログ)`;
+                select.appendChild(opt);
+            });
+        }
+
+        function onQuickDateSelect(selectedDate) {
+            const startInput = document.getElementById('filterStartDate');
+            const endInput = document.getElementById('filterEndDate');
+
+            if (startInput) startInput.value = selectedDate || '';
+            if (endInput) endInput.value = selectedDate || '';
+            applyFilters();
+        }
+
+        function clearDateFilter() {
+            const startInput = document.getElementById('filterStartDate');
+            const endInput = document.getElementById('filterEndDate');
+            const select = document.getElementById('dateQuickSelect');
+
+            if (startInput) startInput.value = '';
+            if (endInput) endInput.value = '';
+            if (select) select.value = '';
+            applyFilters();
+        }
+
+        function applyFilters() {
+            const showPlaces = document.getElementById('filterPlaces')?.checked ?? true;
+            const showActivities = document.getElementById('filterActivities')?.checked ?? true;
+            const startDateVal = document.getElementById('filterStartDate')?.value || '';
+            const endDateVal = document.getElementById('filterEndDate')?.value || '';
+
+            const startDate = startDateVal ? new Date(startDateVal + 'T00:00:00') : null;
+            const endDate = endDateVal ? new Date(endDateVal + 'T23:59:59') : null;
+
+            filteredEvents = rawEvents.filter(ev => {
+                if (ev.type === 'PLACE' && !showPlaces) return false;
+                if (ev.type === 'ACTIVITY' && !showActivities) return false;
+
+                if (startDate && ev.endTime < startDate) return false;
+                if (endDate && ev.startTime > endDate) return false;
+
+                return true;
+            });
+
+            // 昇順（古い日時 -> 新しい日時）にソート
+            filteredEvents.sort((a, b) => a.startTime - b.startTime);
+            updateUI();
+        }
+
+        function updateUI() {
+            const count = filteredEvents.length;
+            const targetEvents = filteredEvents.filter(e => (e.isPlaceIdOnly || isPlaceIdString(e.title)) && !isProtectedLocation(e.title));
+            const placeIdCount = targetEvents.length;
+
+            const exportCountBadge = document.getElementById('exportCountBadge');
+            const exportIcsBtn = document.getElementById('exportIcsBtn');
+            const aiSummaryBtn = document.getElementById('aiSummaryBtn');
+            const activeCountBadge = document.getElementById('activeCountBadge');
+
+            if (exportCountBadge) exportCountBadge.textContent = `${count} 件`;
+            if (exportIcsBtn) exportIcsBtn.disabled = count === 0;
+            if (aiSummaryBtn) aiSummaryBtn.disabled = count === 0;
+            if (activeCountBadge) activeCountBadge.textContent = `表示中: ${count} 件 / 全 ${rawEvents.length} 件`;
+
+            const resolveBtn = document.getElementById('resolvePlaceNamesBtn');
+            const placeIdBadge = document.getElementById('placeIdCountBadge');
+            
+            if (placeIdBadge) placeIdBadge.textContent = `${placeIdCount} 件検出`;
+            if (resolveBtn) resolveBtn.disabled = placeIdCount === 0;
+
+            renderEventsList();
+            if (currentMapMode === 'leaflet') {
+                renderMap();
+            } else {
+                renderGoogleMapIframe();
+            }
+        }
+
+        function renderMap() {
+            if (!leafletMap) return;
+
+            mapMarkers.forEach(m => leafletMap.removeLayer(m));
+            mapMarkers = [];
+            if (mapPolyline) {
+                leafletMap.removeLayer(mapPolyline);
+                mapPolyline = null;
+            }
+
+            const latLngs = [];
+            filteredEvents.forEach((ev) => {
+                if (!ev.lat || !ev.lng || isNaN(ev.lat) || isNaN(ev.lng)) return;
+
+                const latLng = [ev.lat, ev.lng];
+                latLngs.push(latLng);
+
+                const isPlace = ev.type === 'PLACE';
+                const markerColor = isPlace ? '#4f46e5' : '#10b981';
+
+                const marker = L.circleMarker(latLng, {
+                    radius: isPlace ? 7 : 5,
+                    fillColor: markerColor,
+                    color: '#ffffff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.9
+                }).addTo(leafletMap);
+
+                const popupContent = `
+                    <div class="p-1 font-sans text-xs">
+                        <div class="font-bold text-slate-800 mb-1">${escapeHtml(ev.title)}</div>
+                        <div class="text-slate-500 text-[11px] mb-1">${formatDate(ev.startTime)} ${formatTime(ev.startTime)} - ${formatTime(ev.endTime)}</div>
+                        ${ev.address ? `<div class="text-slate-600 text-[11px] mb-1">${escapeHtml(ev.address)}</div>` : ''}
+                        <a href="https://www.google.com/maps/search/?api=1&query=${ev.lat},${ev.lng}" target="_blank" class="text-indigo-600 hover:underline inline-block mt-1">Googleマップで表示 &rarr;</a>
+                    </div>
+                `;
+                marker.bindPopup(popupContent);
+                marker.evId = ev.id;
+                mapMarkers.push(marker);
+            });
+
+            if (latLngs.length > 1) {
+                mapPolyline = L.polyline(latLngs, {
+                    color: '#6366f1',
+                    weight: 3,
+                    opacity: 0.6,
+                    dashArray: '5, 8'
+                }).addTo(leafletMap);
+            }
+
+            if (latLngs.length > 0) {
+                const bounds = L.latLngBounds(latLngs);
+                leafletMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+            }
+        }
+
+        function focusEventOnMap(ev) {
+            if (!ev || !ev.lat || !ev.lng) return;
+            selectedEventForGoogleMap = ev;
+
+            if (currentMapMode === 'google') {
+                renderGoogleMapIframe(ev);
+            } else {
+                if (!leafletMap) return;
+                leafletMap.setView([ev.lat, ev.lng], 16, { animate: true });
+                const targetMarker = mapMarkers.find(m => m.evId === ev.id);
+                if (targetMarker) {
+                    targetMarker.openPopup();
+                }
+            }
+        }
+
+        function exportICS() {
+            if (filteredEvents.length === 0) {
+                showToast("エクスポートするイベントがありません。", 'error');
+                return;
+            }
+
+            let icsContent = [
+                'BEGIN:VCALENDAR',
+                'VERSION:2.0',
+                'PRODID:-//Timeline to Calendar Converter//JA',
+                'CALSCALE:GREGORIAN',
+                'METHOD:PUBLISH'
+            ];
+
+            // AI行動サマリーが存在する場合、対象日の終日イベントとして追加
+            const aiSummaryText = document.getElementById('aiResultText')?.textContent?.trim() || '';
+            const aiSummaryBoxVisible = !document.getElementById('aiResultContainer')?.classList.contains('hidden');
+
+            if (aiSummaryText && aiSummaryBoxVisible && !aiSummaryText.startsWith('タイムラインデータ')) {
+                let startDateObj = filteredEvents.length > 0 && filteredEvents[0].startTime 
+                    ? new Date(filteredEvents[0].startTime) 
+                    : new Date();
+                
+                let endDateObj = new Date(startDateObj);
+                endDateObj.setDate(endDateObj.getDate() + 1);
+
+                let dtStart = formatDateIso(startDateObj);
+                let dtEnd = formatDateIso(endDateObj);
+
+                icsContent.push('BEGIN:VEVENT');
+                icsContent.push(`UID:timeline-ai-summary-${dtStart}`);
+                icsContent.push(`DTSTAMP:${toICSDateString(new Date())}`);
+                icsContent.push(`DTSTART;VALUE=DATE:${dtStart}`);
+                icsContent.push(`DTEND;VALUE=DATE:${dtEnd}`);
+                icsContent.push(`SUMMARY:${cleanIcsText('📝 AI行動サマリー・日記')}`);
+                icsContent.push(`DESCRIPTION:${cleanIcsText(aiSummaryText)}`);
+                icsContent.push('END:VEVENT');
+            }
+
+            filteredEvents.forEach(ev => {
+                const dtStart = toICSDateString(ev.startTime);
+                const dtEnd = toICSDateString(ev.endTime);
+                const summary = cleanIcsText(ev.title);
+                const description = cleanIcsText(`Google Map タイムライン変換イベント\n種別: ${ev.type === 'PLACE' ? '訪問スポット' : '移動'}\n` + (ev.address ? `住所: ${ev.address}\n` : '') + `座標: ${ev.lat}, ${ev.lng}`);
+                const location = cleanIcsText(ev.address || `${ev.lat}, ${ev.lng}`);
+
+                icsContent.push('BEGIN:VEVENT');
+                icsContent.push(`UID:timeline-${ev.id}-${dtStart}`);
+                icsContent.push(`DTSTAMP:${toICSDateString(new Date())}`);
+                icsContent.push(`DTSTART:${dtStart}`);
+                icsContent.push(`DTEND:${dtEnd}`);
+                icsContent.push(`SUMMARY:${summary}`);
+                icsContent.push(`DESCRIPTION:${description}`);
+                if (location) icsContent.push(`LOCATION:${location}`);
+                icsContent.push('END:VEVENT');
+            });
+
+            icsContent.push('END:VCALENDAR');
+
+            let dateSuffix = '';
+            const startInput = document.getElementById('filterStartDate')?.value;
+            const endInput = document.getElementById('filterEndDate')?.value;
+
+            if (startInput && endInput) {
+                const sStr = startInput.replace(/-/g, '');
+                const eStr = endInput.replace(/-/g, '');
+                dateSuffix = (sStr === eStr) ? sStr : `${sStr}-${eStr}`;
+            } else if (startInput) {
+                dateSuffix = startInput.replace(/-/g, '');
+            } else if (endInput) {
+                dateSuffix = endInput.replace(/-/g, '');
+            } else if (filteredEvents.length > 0 && filteredEvents[0].startTime) {
+                dateSuffix = formatDateIso(filteredEvents[0].startTime);
+            } else {
+                dateSuffix = formatDateIso(new Date());
+            }
+
+            const blob = new Blob([icsContent.join('\r\n')], { type: 'text/calendar;charset=utf-8;' });
+            const link = document.createElement('a');
+            const fileName = `timeline_export_${dateSuffix}.ics`;
+
+            if (navigator.msSaveBlob) {
+                navigator.msSaveBlob(blob, fileName);
+            } else {
+                link.href = URL.createObjectURL(blob);
+                link.setAttribute('download', fileName);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+
+            showToast(`${fileName} を正常に保存しました！`, 'success');
+        }
+
+        function renderEventsList() {
+            const container = document.getElementById('timelineContainer');
+            const emptyState = document.getElementById('emptyState');
+
+            if (!container) return;
+
+            if (filteredEvents.length === 0) {
+                container.innerHTML = '';
+                if (emptyState) {
+                    container.appendChild(emptyState);
+                    emptyState.classList.remove('hidden');
+                }
+                return;
+            }
+
+            container.innerHTML = '';
+
+            filteredEvents.forEach((ev) => {
+                const card = document.createElement('div');
+                card.className = "bg-slate-50 hover:bg-indigo-50/50 p-3.5 rounded-xl border border-slate-200 transition-all cursor-pointer flex items-start gap-3 group relative";
+                card.onclick = (e) => {
+                    if (e.target.closest('.no-map-click')) return;
+                    focusEventOnMap(ev);
+                };
+
+                const timeStr = `${formatTime(ev.startTime)} - ${formatTime(ev.endTime)}`;
+                const dateStr = formatDate(ev.startTime);
+
+                const iconName = ev.type === 'PLACE' ? 'map-pin' : 'navigation';
+                const iconColor = ev.type === 'PLACE' ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600';
+                const isPlaceId = ev.isPlaceIdOnly || isPlaceIdString(ev.title);
+
+                const mapSearchUrl = ev.placeId 
+                    ? `https://www.google.com/maps/place/?q=place_id:${ev.placeId}`
+                    : `https://www.google.com/maps/search/?api=1&query=${ev.lat},${ev.lng}`;
+
+                card.innerHTML = `
+                    <div class="p-2 rounded-lg ${iconColor} shrink-0 mt-0.5">
+                        <i data-lucide="${iconName}" class="w-4 h-4"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                            <div class="flex items-center gap-1.5 flex-1 min-w-0">
+                                <input type="text" value="${escapeHtml(ev.title)}" onchange="updateEventTitle('${ev.id}', this.value)" class="no-map-click font-semibold text-xs text-slate-800 bg-transparent hover:bg-white focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded px-1.5 py-0.5 w-full border border-transparent hover:border-slate-300 transition-all truncate" title="クリックして名前を編集">
+                                ${isPlaceId ? `<span class="shrink-0 text-[10px] bg-amber-100 text-amber-800 font-medium px-1.5 py-0.5 rounded">未特定</span>` : ''}
+                            </div>
+                            <span class="text-[11px] font-medium text-slate-500 whitespace-nowrap">${timeStr}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-[11px] text-slate-500">
+                            <span class="truncate">${dateStr} ${ev.address ? '・ ' + escapeHtml(ev.address) : ''}</span>
+                            <a href="${mapSearchUrl}" target="_blank" rel="noopener noreferrer" class="no-map-click text-indigo-600 hover:text-indigo-800 shrink-0 ml-2 flex items-center gap-0.5 hover:underline" title="Googleマップで開く">
+                                <span>マップ</span>
+                                <i data-lucide="external-link" class="w-3 h-3"></i>
+                            </a>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        function updateEventTitle(id, newTitle) {
+            const ev = rawEvents.find(e => e.id === id);
+            if (ev) {
+                ev.title = newTitle;
+                ev.isPlaceIdOnly = false;
+                applyFilters();
+            }
+        }
+
+        async function fetchWithRetry(url, options, maxRetries = 5, onRetryNotice = null) {
+            let attempt = 0;
+            while (attempt <= maxRetries) {
+                const response = await fetch(url, options);
+                if (response.status === 429) {
+                    attempt++;
+                    if (attempt > maxRetries) {
+                        console.warn(`HTTP 429 Max retries (${maxRetries}) reached for ${url}`);
+                        return response;
+                    }
+                    const delay = Math.pow(2, attempt) * 1500 + Math.floor(Math.random() * 1000);
+                    const waitSec = Math.round(delay / 1000);
+
+                    if (typeof onRetryNotice === 'function') {
+                        onRetryNotice(attempt, maxRetries, waitSec);
+                    }
+
+                    console.warn(`HTTP 429 Rate limited. Retrying attempt ${attempt}/${maxRetries} after ${delay}ms...`);
+                    await new Promise(r => setTimeout(r, delay));
+                    continue;
+                }
+                return response;
+            }
+        }
+
+        async function resolvePlaceNamesWithAI() {
+            const targetEvents = filteredEvents.filter(e => (e.isPlaceIdOnly || isPlaceIdString(e.title)) && !isProtectedLocation(e.title));
+            if (targetEvents.length === 0) {
+                showToast("変換対象となる未特定の訪問場所は見つかりませんでした。", 'info');
+                return;
+            }
+
+            let apiKey = getApiKey();
+            if (!apiKey) {
+                const userKey = await showPromptModal("Gemini API Key が未設定です", "Gemini AI機能を利用するにはGoogle AI StudioのAPIキーが必要です。APIキーを入力してください:", "");
+                if (!userKey) {
+                    showToast("APIキーが指定されていないため処理を中断しました。", 'error');
+                    return;
+                }
+                saveApiKey(userKey);
+                const input = document.getElementById('apiKeyInput');
+                if (input) input.value = userKey;
+                apiKey = userKey;
+            }
+
+            const btn = document.getElementById('resolvePlaceNamesBtn');
+            if (btn) btn.disabled = true;
+
+            const BATCH_SIZE = 3;
+            let updatedCount = 0;
+            const totalItems = targetEvents.length;
+
+            const modelsToTry = [
+                'gemini-2.5-flash',
+                'gemini-2.0-flash',
+                'gemini-1.5-flash'
+            ];
+
+            const systemPrompt = "あなたはGoogle Mapsの位置情報（緯度経度）から正確な施設・店舗名を割り出す専門AIです。指定されたJSON形式厳守で回答してください。";
+
+            try {
+                for (let i = 0; i < totalItems; i += BATCH_SIZE) {
+                    const batch = targetEvents.slice(i, i + BATCH_SIZE);
+                    const currentBatchNum = Math.floor(i / BATCH_SIZE) + 1;
+                    const totalBatches = Math.ceil(totalItems / BATCH_SIZE);
+
+                    const updateStatus = (extraMsg = "") => {
+                        if (btn) {
+                            btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> 店舗名検索中 (${currentBatchNum}/${totalBatches} バッチ)${extraMsg}...`;
+                            lucide.createIcons();
+                        }
+                    };
+
+                    updateStatus();
+
+                    const targetList = batch.map((e) => ({
+                        id: e.id,
+                        latitude: e.lat,
+                        longitude: e.lng,
+                        rawPlaceId: e.placeId || '',
+                        googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${e.lat},${e.lng}`,
+                        visitTime: `${formatDate(e.startTime)} ${formatTime(e.startTime)}`
+                    }));
+
+                    const promptText = `
+以下はGoogleマップのタイムラインから抽出された位置情報データリストです。
+緯度経度(latitude, longitude)およびGoogle Maps URLをキーとして、その地点に存在する「最も確実な日本語の店舗名・施設名・ビル名・駅名・スポット名」を特定してください。
+
+対象リスト:
+${JSON.stringify(targetList, null, 2)}
+
+注意事項:
+1. "ChIJ..." 形式のPlace IDは内部IDのため、緯度経度（latitude, longitude）とその周辺にある実在スポット名（例: 「スターバックスコーヒー 〇〇店」「〇〇ビル」「〇〇駅」等）を最優先で特定してください。
+2. 住宅街など具体的な店舗がない場合は「〇〇市〇〇町周辺」といった地区・地名を返してください。
+3. "自宅" や "会社" と推測される場所であっても、特定可能な店舗や施設がない場合は「特定エリア（緯度経度付近）」としてください。
+                    `;
+
+                    let batchSuccess = false;
+
+                    for (const modelName of modelsToTry) {
+                        if (batchSuccess) break;
+                        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+                        try {
+                            const response = await fetchWithRetry(apiUrl, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    contents: [{ parts: [{ text: promptText }] }],
+                                    tools: [{ "google_search": {} }],
+                                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                                    generationConfig: {
+                                        responseMimeType: "application/json",
+                                        responseSchema: {
+                                            type: "ARRAY",
+                                            items: {
+                                                type: "OBJECT",
+                                                properties: {
+                                                    id: { type: "STRING" },
+                                                    resolvedName: { type: "STRING" }
+                                                },
+                                                required: ["id", "resolvedName"]
+                                            }
+                                        }
+                                    }
+                                })
+                            }, 3, (attempt, maxAttempts, waitSec) => {
+                                updateStatus(` (制限待機中 ${waitSec}秒 #${attempt})`);
+                            });
+
+                            if (response && response.ok) {
+                                const data = await response.json();
+                                const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                                if (jsonText) {
+                                    const resolvedItems = JSON.parse(jsonText);
+                                    if (Array.isArray(resolvedItems)) {
+                                        resolvedItems.forEach(item => {
+                                            if (!item || !item.id) return;
+                                            const ev = rawEvents.find(e => e.id === item.id);
+                                            if (ev && item.resolvedName && !isProtectedLocation(ev.title)) {
+                                                ev.title = item.resolvedName;
+                                                ev.isPlaceIdOnly = false;
+                                                updatedCount++;
+                                            }
+                                        });
+                                        batchSuccess = true;
+                                    }
+                                }
+                            } else if (response && response.status === 401) {
+                                throw new Error("APIキーが無効または未設定です (401 Unauthorized)。Gemini APIキーをご確認ください。");
+                            }
+                        } catch (e) {
+                            if (e.message && e.message.includes("401")) throw e;
+                            console.warn(`Model ${modelName} with search tool failed, trying next fallback...`, e);
+                        }
+                    }
+
+                    if (!batchSuccess) {
+                        updateStatus(" (標準AI解析へフォールバック中)");
+                        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+                        try {
+                            const response = await fetchWithRetry(apiUrl, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    contents: [{ parts: [{ text: promptText }] }],
+                                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                                    generationConfig: {
+                                        responseMimeType: "application/json",
+                                        responseSchema: {
+                                            type: "ARRAY",
+                                            items: {
+                                                type: "OBJECT",
+                                                properties: {
+                                                    id: { type: "STRING" },
+                                                    resolvedName: { type: "STRING" }
+                                                },
+                                                required: ["id", "resolvedName"]
+                                            }
+                                        }
+                                    }
+                                })
+                            }, 2);
+
+                            if (response && response.ok) {
+                                const data = await response.json();
+                                const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                                if (jsonText) {
+                                    const resolvedItems = JSON.parse(jsonText);
+                                    if (Array.isArray(resolvedItems)) {
+                                        resolvedItems.forEach(item => {
+                                            if (!item || !item.id) return;
+                                            const ev = rawEvents.find(e => e.id === item.id);
+                                            if (ev && item.resolvedName && !isProtectedLocation(ev.title)) {
+                                                ev.title = item.resolvedName;
+                                                ev.isPlaceIdOnly = false;
+                                                updatedCount++;
+                                            }
+                                        });
+                                        batchSuccess = true;
+                                    }
+                                }
+                            }
+                        } catch (err) {
+                            console.warn("Standard Gemini resolution failed:", err);
+                        }
+                    }
+
+                    if (i + BATCH_SIZE < totalItems) {
+                        updateStatus(" (待機中)");
+                        await new Promise(r => setTimeout(r, 1800));
+                    }
+                }
+
+                if (updatedCount > 0) {
+                    showToast(`${updatedCount} 件の場所名を特定・更新しました！`, 'success');
+                    applyFilters();
+                } else {
+                    showToast("更新可能な名前が見つかりませんでした。時間をおいて再実行してください。", 'info');
+                }
+            } catch (err) {
+                console.error("Place resolution error:", err);
+                showToast(`処理中にエラーが発生しました: ${err.message || err}`, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = `<i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Gemini AI (位置＋Web検索) で店名特定`;
+                    lucide.createIcons();
+                }
+            }
+        }
+
+        async function generateAISummary() {
+            if (filteredEvents.length === 0) return;
+
+            let apiKey = getApiKey();
+            if (!apiKey) {
+                const userKey = await showPromptModal("Gemini API Key が未設定です", "Gemini AI機能を利用するにはAPIキーが必要です。APIキーを入力してください:", "");
+                if (!userKey) {
+                    return;
+                }
+                saveApiKey(userKey);
+                const input = document.getElementById('apiKeyInput');
+                if (input) input.value = userKey;
+                apiKey = userKey;
+            }
+
+            const btn = document.getElementById('aiSummaryBtn');
+            const resultBox = document.getElementById('aiResultContainer');
+            const resultText = document.getElementById('aiResultText');
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> AI分析中...`;
+                lucide.createIcons();
+            }
+
+            if (resultBox) resultBox.classList.remove('hidden');
+            if (resultText) resultText.textContent = 'タイムラインデータを元にサマリーを作成しています...';
+
+            const eventDescriptions = filteredEvents.map(e => 
+                `- ${formatDate(e.startTime)} ${formatTime(e.startTime)}~${formatTime(e.endTime)}: ${e.title} ${e.address ? '(' + e.address + ')' : ''}`
+            ).join('\n');
+
+            const systemPrompt = "あなたはユーザーのロケーション履歴から1日の行先やスケジュールを自然な日本語の日記・行動要約としてまとめるアシスタントです。絵文字を交えつつ見やすく箇条書きや要約文を作成してください。";
+            const userQuery = `以下のタイムライン移動データから、1日の行動サマリーと振り返り日記を作成してください:\n\n${eventDescriptions}`;
+
+            const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+            let summarySuccess = false;
+
+            for (const modelName of modelsToTry) {
+                if (summarySuccess) break;
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+                try {
+                    const response = await fetchWithRetry(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: userQuery }] }],
+                            systemInstruction: { parts: [{ text: systemPrompt }] }
+                        })
+                    }, 3);
+
+                    if (response && response.ok) {
+                        const data = await response.json();
+                        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "サマリーの作成に失敗しました。";
+                        if (resultText) resultText.textContent = text;
+                        summarySuccess = true;
+                    } else if (response && response.status === 401) {
+                        throw new Error("APIキーが無効または未設定です (401 Unauthorized)。Gemini APIキーをご確認ください。");
+                    }
+                } catch (err) {
+                    if (err.message && err.message.includes("401")) throw err;
+                    console.warn(`Summary generation with ${modelName} failed, trying next...`, err);
+                }
+            }
+
+            if (!summarySuccess && resultText && resultText.textContent.startsWith('タイムラインデータ')) {
+                resultText.textContent = 'APIの無料枠制限(429)のため生成を完了できませんでした。少し時間を置いて再試行してください。';
+            }
+
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<i data-lucide="sparkles" class="w-3.5 h-3.5"></i> AIで日記・行動サマリーを作成`;
+                lucide.createIcons();
+            }
+        }
+
+        function copyAiText() {
+            const textEl = document.getElementById('aiResultText');
+            if (!textEl || !textEl.textContent) return;
+            const text = textEl.textContent;
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showToast('サマリーをクリップボードにコピーしました！', 'success');
+                }).catch(() => {
+                    fallbackCopyText(text);
+                });
+            } else {
+                fallbackCopyText(text);
+            }
+        }
+
+        function fallbackCopyText(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showToast('サマリーをコピーしました！', 'success');
+            } catch (e) {
+                console.error('Copy failed', e);
+            }
+            document.body.removeChild(textarea);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function formatDate(date) {
+            if (!date || isNaN(date.getTime())) return '';
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}/${m}/${d}`;
+        }
+
+        function formatTime(date) {
+            if (!date || isNaN(date.getTime())) return '';
+            const h = String(date.getHours()).padStart(2, '0');
+            const m = String(date.getMinutes()).padStart(2, '0');
+            return `${h}:${m}`;
+        }
+
+        function formatDateIso(date) {
+            if (!date || isNaN(date.getTime())) return 'export';
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}${m}${d}`;
+        }
+
+        function toICSDateString(date) {
+            if (!date || isNaN(date.getTime())) return '';
+            return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+        }
+
+        function cleanIcsText(str) {
+            if (!str) return '';
+            return String(str).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+        }
+    </script>
+</body>
+</html>
