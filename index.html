@@ -1124,11 +1124,15 @@
 
             // Descending order: Newest -> Oldest
             const sortedDates = Object.keys(dateMap).sort((a, b) => b.localeCompare(a));
+            const dayOfWeekNames = ['日', '月', '火', '水', '木', '金', '土'];
 
             sortedDates.forEach(dStr => {
                 const opt = document.createElement('option');
                 opt.value = dStr;
-                opt.textContent = `${dStr} (${dateMap[dStr]} 件のイベント)`;
+                // Parse date in local timezone to get precise day of week
+                const d = new Date(dStr + 'T00:00:00');
+                const dayName = dayOfWeekNames[d.getDay()];
+                opt.textContent = `${dStr}-${dayName}(${dateMap[dStr]}件のイベント)`;
                 select.appendChild(opt);
             });
         }
@@ -1234,8 +1238,9 @@
                             </div>
                             <div class="min-w-0 flex-1">
                                 <div class="flex items-center gap-2 flex-wrap">
-                                    <h4 class="font-bold text-xs text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
-                                        ${escapeHtml(e.title)}
+                                    <h4 onclick="event.stopPropagation(); quickEditTitle('${e.id}')" title="クリックして場所名を直接手直し" class="font-bold text-xs text-slate-900 hover:text-indigo-600 hover:underline transition-colors truncate flex items-center gap-1 cursor-text">
+                                        <span>${escapeHtml(e.title)}</span>
+                                        <i data-lucide="pencil" class="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity"></i>
                                     </h4>
                                     ${e.confidence === 'HIGH' ? '<span class="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.2 rounded">確定</span>' : ''}
                                 </div>
@@ -1247,8 +1252,8 @@
                             </div>
                         </div>
                         <div class="flex items-center gap-1 opacity-80 group-hover:opacity-100 shrink-0">
-                            <button onclick="event.stopPropagation(); openEditModal('${e.id}')" title="編集" class="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 hover:text-slate-800 transition-colors">
-                                <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                            <button onclick="event.stopPropagation(); openEditModal('${e.id}')" title="詳細手直し (場所名・住所・日時)" class="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 hover:text-slate-800 transition-colors">
+                                <i data-lucide="pencil-line" class="w-3.5 h-3.5"></i>
                             </button>
                             <button onclick="event.stopPropagation(); deleteEvent('${e.id}')" title="削除" class="p-1.5 hover:bg-red-100 rounded-lg text-slate-400 hover:text-red-600 transition-colors">
                                 <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
@@ -1316,6 +1321,46 @@
             populateDateQuickSelect();
             applyFilters();
             showToast('サンプルデータをロードしました！', 'success');
+        }
+
+        // 場所名（スポット名）のクイック手直し
+        function quickEditTitle(id) {
+            const ev = rawEvents.find(item => item.id === id);
+            if (!ev) return;
+
+            const newTitle = prompt('新しい場所名・スポット名を入力してください:', ev.title);
+            if (newTitle !== null && newTitle.trim() !== '' && newTitle.trim() !== ev.title) {
+                pushHistoryState('場所名の手直し');
+                ev.title = newTitle.trim();
+                ev.isPlaceIdOnly = false;
+                applyFilters();
+                showToast(`場所名を「${ev.title}」に更新しました。`, 'success');
+            }
+        }
+
+        // 詳細編集モーダルの表示制御
+        function openEditModal(id) {
+            const ev = rawEvents.find(item => item.id === id);
+            if (!ev) return;
+
+            document.getElementById('editEventId').value = ev.id;
+            document.getElementById('editEventTitle').value = ev.title || '';
+            document.getElementById('editEventAddress').value = ev.address || '';
+
+            const formatForInput = (d) => {
+                if (!d || isNaN(d.getTime())) return '';
+                const pad = (n) => String(n).padStart(2, '0');
+                return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+            };
+
+            document.getElementById('editEventStart').value = formatForInput(ev.startTime);
+            document.getElementById('editEventEnd').value = formatForInput(ev.endTime);
+
+            document.getElementById('editEventModal').classList.remove('hidden');
+        }
+
+        function closeEditModal() {
+            document.getElementById('editEventModal').classList.add('hidden');
         }
 
         function saveEditedEvent(e) {
@@ -1436,39 +1481,44 @@ ${JSON.stringify(targetItems, null, 2)}
         }
 
         async function callGeminiApiWithFallback(promptText, apiKey, expectJson = false) {
-            const models = ['gemini-3.6-flash', 'gemini-2.5-flash'];
-            let lastError = null;
+            const models = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+            const errors = [];
 
             for (const model of models) {
-                try {
-                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-                    const payload = {
-                        contents: [{ parts: [{ text: promptText }] }]
-                    };
-                    if (expectJson) {
-                        payload.generationConfig = { responseMimeType: "application/json" };
+                // Try with JSON generationConfig first if requested, and fall back to standard text prompt if rejected
+                const configsToTry = expectJson ? [{ responseMimeType: "application/json" }, null] : [null];
+
+                for (const config of configsToTry) {
+                    try {
+                        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+                        const payload = {
+                            contents: [{ parts: [{ text: promptText }] }]
+                        };
+                        if (config) {
+                            payload.generationConfig = config;
+                        }
+
+                        const resp = await fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (!resp.ok) {
+                            const errText = await resp.text();
+                            throw new Error(`[${model}] ${resp.status}: ${errText}`);
+                        }
+
+                        const data = await resp.json();
+                        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                        if (text) return text;
+                    } catch (err) {
+                        console.warn(`Gemini Model ${model} attempt failed:`, err);
+                        errors.push(err.message || String(err));
                     }
-
-                    const resp = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!resp.ok) {
-                        const errText = await resp.text();
-                        throw new Error(`[${model}] ${resp.status}: ${errText}`);
-                    }
-
-                    const data = await resp.json();
-                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                    if (text) return text;
-                } catch (err) {
-                    console.warn(`Gemini Model ${model} failed:`, err);
-                    lastError = err;
                 }
             }
-            throw lastError || new Error("Gemini API 呼び出しに失敗しました。");
+            throw new Error(`Gemini API 呼び出しに失敗しました:\n` + errors.join('\n'));
         }
 
         async function generateAISummary() {
@@ -1585,7 +1635,27 @@ ${JSON.stringify(summaryList, null, 2)}
             const blob = new Blob([icsContent.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
-            link.download = `timeline-calendar-${new Date().toISOString().slice(0,10)}.ics`;
+
+            // Determine output filename based on date filter or active event range
+            const startDateVal = document.getElementById('filterStartDate')?.value;
+            const endDateVal = document.getElementById('filterEndDate')?.value;
+            let filename = '';
+
+            if (startDateVal && endDateVal) {
+                filename = startDateVal === endDateVal ? `${startDateVal}.ics` : `${startDateVal}_${endDateVal}.ics`;
+            } else if (startDateVal) {
+                filename = `${startDateVal}.ics`;
+            } else if (endDateVal) {
+                filename = `${endDateVal}.ics`;
+            } else if (filteredEvents.length > 0) {
+                const firstDate = filteredEvents[0].startTime.toISOString().split('T')[0];
+                const lastDate = filteredEvents[filteredEvents.length - 1].startTime.toISOString().split('T')[0];
+                filename = firstDate === lastDate ? `${firstDate}.ics` : `${firstDate}_${lastDate}.ics`;
+            } else {
+                filename = `timeline-calendar-${new Date().toISOString().slice(0,10)}.ics`;
+            }
+
+            link.download = filename;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
