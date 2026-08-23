@@ -59,17 +59,13 @@
                 </div>
             </div>
             <div class="flex items-center gap-2">
-                <!-- Version Control & Undo/Redo Buttons -->
+                <!-- Undo/Redo Buttons -->
                 <div class="hidden sm:flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
                     <button id="undoBtn" onclick="undoAction()" disabled title="元に戻す (Ctrl+Z)" class="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:text-slate-900 disabled:text-slate-400 disabled:hover:text-slate-400 rounded-lg hover:bg-white transition-all flex items-center gap-1">
                         <i data-lucide="undo-2" class="w-3.5 h-3.5"></i> 元に戻す
                     </button>
                     <button id="redoBtn" onclick="redoAction()" disabled title="やり直す (Ctrl+Y)" class="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:text-slate-900 disabled:text-slate-400 disabled:hover:text-slate-400 rounded-lg hover:bg-white transition-all flex items-center gap-1">
                         <i data-lucide="redo-2" class="w-3.5 h-3.5"></i> やり直す
-                    </button>
-                    <div class="w-px h-4 bg-slate-300 mx-0.5"></div>
-                    <button onclick="openVersionModal()" title="バージョン管理・スナップショット" class="px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:text-indigo-900 rounded-lg hover:bg-white transition-all flex items-center gap-1">
-                        <i data-lucide="git-branch" class="w-3.5 h-3.5 text-indigo-600"></i> バージョン履歴
                     </button>
                 </div>
                 <button onclick="loadSampleData()" class="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 border border-indigo-200">
@@ -378,39 +374,6 @@
         </div>
     </div>
 
-    <!-- Version Control Modal -->
-    <div id="versionModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl p-5 max-w-lg w-full shadow-2xl space-y-4 animate-in fade-in zoom-in duration-150">
-            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <i data-lucide="git-branch" class="w-4 h-4 text-indigo-600"></i>
-                    Ver2 バージョン管理・スナップショット一覧
-                </h3>
-                <button onclick="closeVersionModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold">&times;</button>
-            </div>
-            <div class="space-y-3 text-xs">
-                <div class="flex items-center justify-between bg-indigo-50 p-3 rounded-xl border border-indigo-100">
-                    <div>
-                        <h4 class="font-bold text-indigo-900">手動スナップショット作成</h4>
-                        <p class="text-[11px] text-indigo-700">現在の編集状態をバージョンポイントとして保存します</p>
-                    </div>
-                    <button onclick="createSnapshot()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-1.5 shrink-0">
-                        <i data-lucide="save" class="w-3.5 h-3.5"></i> 保存する
-                    </button>
-                </div>
-                <div class="space-y-2">
-                    <label class="block font-semibold text-slate-700">保存されたスナップショット履歴</label>
-                    <div id="snapshotList" class="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
-                        <!-- Snapshot items populated dynamically -->
-                    </div>
-                </div>
-            </div>
-            <div class="flex justify-end pt-3 border-t border-slate-100">
-                <button onclick="closeVersionModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg transition-colors">閉じる</button>
-            </div>
-        </div>
-    </div>
-
     <script>
         // Global Application State
         let rawEvents = [];
@@ -422,10 +385,9 @@
         let selectedEventForGoogleMap = null;
         let modalResolver = null;
 
-        // Version Control (Undo/Redo & Snapshots) State
+        // Version Control (Undo/Redo) State
         let undoStack = [];
         let redoStack = [];
-        let snapshots = [];
         const MAX_HISTORY = 30;
         let isInternalStateChange = false;
 
@@ -493,7 +455,6 @@
             initMap();
             setupDropZone();
             initApiKeyInput();
-            loadSnapshotsFromStorage();
         });
 
         function pushHistoryState(actionDescription = 'データの変更') {
@@ -551,99 +512,9 @@
         function updateUndoRedoButtons() {
             const undoBtn = document.getElementById('undoBtn');
             const redoBtn = document.getElementById('redoBtn');
+
             if (undoBtn) undoBtn.disabled = undoStack.length === 0;
             if (redoBtn) redoBtn.disabled = redoStack.length === 0;
-        }
-
-        function createSnapshot() {
-            const title = prompt('スナップショットのタイトル（例: AI補完後、手動修正版など）:', `バージョン ${snapshots.length + 1} (${new Date().toLocaleTimeString()})`);
-            if (!title) return;
-
-            const snapshot = {
-                id: 'snap-' + Date.now(),
-                title: title,
-                timestamp: new Date().toLocaleString(),
-                count: rawEvents.length,
-                data: JSON.parse(JSON.stringify(rawEvents, (key, value) => {
-                    if (value instanceof Date) return value.toISOString();
-                    return value;
-                }))
-            };
-
-            snapshots.unshift(snapshot);
-            if (snapshots.length > 10) snapshots.pop();
-            saveSnapshotsToStorage();
-            renderSnapshotsList();
-            showToast(`スナップショット「${title}」を保存しました！`, 'success');
-        }
-
-        function saveSnapshotsToStorage() {
-            try {
-                localStorage.setItem('timeline_snapshots_v2', JSON.stringify(snapshots));
-            } catch (e) {
-                console.error("Failed to save snapshots", e);
-            }
-        }
-
-        function loadSnapshotsFromStorage() {
-            try {
-                const stored = localStorage.getItem('timeline_snapshots_v2');
-                if (stored) {
-                    snapshots = JSON.parse(stored);
-                }
-            } catch (e) {
-                console.error("Failed to load snapshots", e);
-            }
-            renderSnapshotsList();
-        }
-
-        function renderSnapshotsList() {
-            const container = document.getElementById('snapshotList');
-            if (!container) return;
-
-            if (snapshots.length === 0) {
-                container.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">保存されたスナップショットはありません。</p>`;
-                return;
-            }
-
-            container.innerHTML = snapshots.map(s => `
-                <div class="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition-all">
-                    <div>
-                        <h5 class="font-bold text-slate-900">${escapeHtml(s.title)}</h5>
-                        <p class="text-[10px] text-slate-500">${s.timestamp} • 記録件数: ${s.count} 件</p>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                        <button onclick="restoreSnapshot('${s.id}')" class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors text-[11px]">復元</button>
-                        <button onclick="deleteSnapshot('${s.id}')" class="p-1 hover:bg-red-100 text-slate-400 hover:text-red-600 rounded-lg"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
-                    </div>
-                </div>
-            `).join('');
-            lucide.createIcons();
-        }
-
-        function restoreSnapshot(id) {
-            const s = snapshots.find(item => item.id === id);
-            if (!s) return;
-            pushHistoryState('スナップショット復元前');
-            restoreEventsState(s.data);
-            closeVersionModal();
-            showToast(`スナップショット「${s.title}」を復元しました。`, 'success');
-        }
-
-        function deleteSnapshot(id) {
-            snapshots = snapshots.filter(s => s.id !== id);
-            saveSnapshotsToStorage();
-            renderSnapshotsList();
-            showToast('スナップショットを削除しました。', 'info');
-        }
-
-        function openVersionModal() {
-            renderSnapshotsList();
-            document.getElementById('versionModal').classList.remove('hidden');
-        }
-
-        function closeVersionModal() {
-            document.getElementById('versionModal').classList.add('hidden');
         }
 
         // Keyboard Shortcut Listeners for Ctrl+Z / Ctrl+Y
@@ -1481,40 +1352,62 @@ ${JSON.stringify(targetItems, null, 2)}
         }
 
         async function callGeminiApiWithFallback(promptText, apiKey, expectJson = false) {
-            const models = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+            // Use active model identifiers
+            const models = ['gemini-3.6-flash', 'gemini-3.6-pro', 'gemini-2.5-pro'];
             const errors = [];
+            const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
             for (const model of models) {
-                // Try with JSON generationConfig first if requested, and fall back to standard text prompt if rejected
                 const configsToTry = expectJson ? [{ responseMimeType: "application/json" }, null] : [null];
 
                 for (const config of configsToTry) {
-                    try {
-                        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-                        const payload = {
-                            contents: [{ parts: [{ text: promptText }] }]
-                        };
-                        if (config) {
-                            payload.generationConfig = config;
+                    const maxRetries = 3;
+                    for (let attempt = 0; attempt < maxRetries; attempt++) {
+                        try {
+                            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+                            const payload = {
+                                contents: [{ parts: [{ text: promptText }] }]
+                            };
+                            if (config) {
+                                payload.generationConfig = config;
+                            }
+
+                            const resp = await fetch(url, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(payload)
+                            });
+
+                            // Handle transient errors (503 High Demand, 429 Rate Limit, 5xx Server Errors) with retry delay
+                            if (resp.status === 503 || resp.status === 429 || resp.status >= 500) {
+                                const errText = await resp.text();
+                                if (attempt < maxRetries - 1) {
+                                    console.warn(`[${model}] Temporary error ${resp.status}, retrying (${attempt + 1}/${maxRetries}) in ${(attempt + 1) * 1200}ms...`);
+                                    await delay((attempt + 1) * 1200);
+                                    continue;
+                                }
+                                throw new Error(`[${model}] ${resp.status}: ${errText}`);
+                            }
+
+                            if (!resp.ok) {
+                                const errText = await resp.text();
+                                throw new Error(`[${model}] ${resp.status}: ${errText}`);
+                            }
+
+                            const data = await resp.json();
+                            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                            if (text) return text;
+                        } catch (err) {
+                            // Don't retry if the model endpoint itself is missing/404
+                            if (err.message && err.message.includes('404')) {
+                                errors.push(err.message);
+                                break;
+                            }
+                            if (attempt === maxRetries - 1) {
+                                console.warn(`Gemini Model ${model} attempt failed:`, err);
+                                errors.push(err.message || String(err));
+                            }
                         }
-
-                        const resp = await fetch(url, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload)
-                        });
-
-                        if (!resp.ok) {
-                            const errText = await resp.text();
-                            throw new Error(`[${model}] ${resp.status}: ${errText}`);
-                        }
-
-                        const data = await resp.json();
-                        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                        if (text) return text;
-                    } catch (err) {
-                        console.warn(`Gemini Model ${model} attempt failed:`, err);
-                        errors.push(err.message || String(err));
                     }
                 }
             }
