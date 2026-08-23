@@ -54,8 +54,8 @@
                     <i data-lucide="calendar-range" class="w-5 h-5"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-slate-900 text-lg leading-tight">Timeline to Calendar Ver2</h1>
-                    <p class="text-xs text-slate-500">Googleマップの移動履歴をGoogleカレンダー用 `.ics` へ一括変換 (バージョン管理対応)</p>
+                    <h1 class="font-bold text-slate-900 text-lg leading-tight">Timeline to Calendar Ver3</h1>
+                    <p class="text-xs text-slate-500">Googleマップの移動履歴をGoogleカレンダー用 `.ics` へ一括変換 (Places API連動)</p>
                 </div>
             </div>
             <div class="flex items-center gap-2">
@@ -170,40 +170,70 @@
                         </div>
                     </div>
 
-                    <!-- Gemini API Key Input -->
-                    <div class="pt-2 border-t border-slate-100 space-y-1.5">
-                        <div class="flex items-center justify-between">
-                            <label for="apiKeyInput" class="block text-xs font-semibold text-slate-700 flex items-center gap-1">
-                                <i data-lucide="key-round" class="w-3.5 h-3.5 text-indigo-600"></i>
-                                Gemini API Key
-                            </label>
-                            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="text-[10px] text-indigo-600 hover:underline flex items-center gap-0.5">
-                                無料キーを取得 <i data-lucide="external-link" class="w-2.5 h-2.5"></i>
-                            </a>
+                    <!-- Google API Keys Section (Split into Places API Key & AI Studio Key) -->
+                    <div class="pt-2 border-t border-slate-100 space-y-3">
+                        <!-- Places API Key -->
+                        <div class="space-y-1">
+                            <div class="flex items-center justify-between">
+                                <label for="placesApiKeyInput" class="block text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                                    <i data-lucide="map-pin-check" class="w-3.5 h-3.5 text-blue-600"></i>
+                                    Google Maps Places API Key (店名特定)
+                                </label>
+                                <a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noopener noreferrer" class="text-[9px] text-blue-600 hover:underline flex items-center gap-0.5">
+                                    GCPキー管理 <i data-lucide="external-link" class="w-2.5 h-2.5"></i>
+                                </a>
+                            </div>
+                            <input type="password" id="placesApiKeyInput" placeholder="AIzaSy... (GCP Places API用)" onchange="savePlacesApiKey(this.value)" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono">
+                            <p class="text-[9px] text-slate-400">※ GCPで「Places API (New)」を有効化したキーを入力</p>
                         </div>
-                        <input type="password" id="apiKeyInput" placeholder="AIzaSy..." onchange="saveApiKey(this.value)" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono">
-                        <p class="text-[10px] text-slate-400">※ 入力されたキーはブラウザ (localStorage) にのみ安全に保存されます。</p>
+
+                        <!-- Gemini AI Studio Key -->
+                        <div class="space-y-1">
+                            <div class="flex items-center justify-between">
+                                <label for="geminiApiKeyInput" class="block text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                                    <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-600"></i>
+                                    Google AI Studio Key (AIサマリー)
+                                </label>
+                                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="text-[9px] text-indigo-600 hover:underline flex items-center gap-0.5">
+                                    AI Studioキー取得 <i data-lucide="external-link" class="w-2.5 h-2.5"></i>
+                                </a>
+                            </div>
+                            <input type="password" id="geminiApiKeyInput" placeholder="AIzaSy... (Gemini AI用)" onchange="saveGeminiApiKey(this.value)" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono">
+                            <p class="text-[9px] text-slate-400">※ <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="text-indigo-600 font-semibold underline">Google AI Studio</a> で無料発行したキーをお使いください。</p>
+                        </div>
                     </div>
                 </div>
 
                 <hr class="border-slate-100">
 
-                <div class="bg-amber-50/80 p-3.5 rounded-xl border border-amber-200 space-y-3">
+                <!-- Google Places API Section -->
+                <div class="bg-blue-50/80 p-3.5 rounded-xl border border-blue-200 space-y-3">
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                            <i data-lucide="search-code" class="w-4 h-4 text-amber-600"></i>
-                            場所名・Place ID の補完・高精度置換
+                        <span class="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                            <i data-lucide="map-pin-check" class="w-4 h-4 text-blue-600"></i>
+                            Google Places API (店名・住所特定)
                         </span>
-                        <span id="placeIdCountBadge" class="text-[10px] bg-amber-200/80 text-amber-900 font-semibold px-2 py-0.5 rounded-full">0 件検出</span>
+                        <span id="placeIdCountBadge" class="text-[10px] bg-blue-200/80 text-blue-900 font-semibold px-2 py-0.5 rounded-full">0 件検出</span>
                     </div>
-                    <p class="text-[11px] text-amber-800 leading-relaxed">
-                        ※ 「自宅」「会社」などの登録場所は自動判別され保護されます。
-                    </p>
                     
-                    <button id="resolvePlaceNamesBtn" onclick="resolvePlaceNamesWithAI()" disabled class="w-full py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-slate-300 text-white font-semibold text-xs rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-sm">
-                        <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
-                        Gemini AI (位置＋Web検索) で店名特定
+                    <div class="text-[11px] text-blue-900 space-y-1 leading-relaxed">
+                        <p class="font-medium text-blue-950">🛡️ コスト削減・安全性対策済み:</p>
+                        <ul class="list-disc list-inside text-[10px] text-blue-800 space-y-0.5">
+                            <li><span class="font-semibold">Basic フィールドマスク</span> (`name,formatted_address`) のみ指定</li>
+                            <li><span class="font-semibold">ローカルキャッシュ</span>機能により同じ Place ID へのリクエストは <span class="font-bold underline">0回</span></li>
+                            <li>「自宅」「会社」などの登録場所は自動判別保護</li>
+                        </ul>
+                    </div>
+
+                    <button id="resolvePlacesBtn" onclick="resolvePlaceNamesWithPlacesAPI()" disabled class="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-semibold text-xs rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-sm">
+                        <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                        Places API (Basic) で店名取得
                     </button>
+
+                    <div class="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-blue-100">
+                        <span id="placeCacheCountLabel">キャッシュ保存数: 0件</span>
+                        <button onclick="clearPlacesCache()" class="text-slate-400 hover:text-red-600 underline">キャッシュ消去</button>
+                    </div>
                 </div>
 
                 <hr class="border-slate-100">
@@ -418,7 +448,9 @@
             {
                 id: "ev-3",
                 type: "PLACE",
-                title: "代々木公園",
+                title: "ChIJ3S-JX3yLGGARy_vXfXy1sAA", // Place ID Sample
+                placeId: "ChIJ3S-JX3yLGGARy_vXfXy1sAA",
+                isPlaceIdOnly: true,
                 address: "東京都渋谷区代々木神園町2-1",
                 startTime: new Date("2026-08-09T11:05:00"),
                 endTime: new Date("2026-08-09T13:30:00"),
@@ -454,8 +486,51 @@
             lucide.createIcons();
             initMap();
             setupDropZone();
-            initApiKeyInput();
+            initApiKeyInputs();
+            updatePlacesCacheCountUI();
         });
+
+        // Local Storage Cache Management for Google Places API
+        const PLACES_CACHE_KEY = 'google_places_api_cache_v1';
+
+        function getPlacesCache() {
+            try {
+                return JSON.parse(localStorage.getItem(PLACES_CACHE_KEY) || '{}');
+            } catch (e) {
+                console.error("Failed to load places cache", e);
+                return {};
+            }
+        }
+
+        function setPlacesCache(placeId, data) {
+            try {
+                const cache = getPlacesCache();
+                cache[placeId] = {
+                    name: data.name,
+                    address: data.address || '',
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(PLACES_CACHE_KEY, JSON.stringify(cache));
+                updatePlacesCacheCountUI();
+            } catch (e) {
+                console.error("Failed to save to places cache", e);
+            }
+        }
+
+        function updatePlacesCacheCountUI() {
+            const cache = getPlacesCache();
+            const count = Object.keys(cache).length;
+            const label = document.getElementById('placeCacheCountLabel');
+            if (label) label.textContent = `キャッシュ保存数: ${count}件`;
+        }
+
+        function clearPlacesCache() {
+            if (confirm('ローカルに保存されている Places API のキャッシュを消去しますか？')) {
+                localStorage.removeItem(PLACES_CACHE_KEY);
+                updatePlacesCacheCountUI();
+                showToast('Places API キャッシュを消去しました。', 'info');
+            }
+        }
 
         function pushHistoryState(actionDescription = 'データの変更') {
             if (isInternalStateChange) return;
@@ -570,25 +645,52 @@
             }, 4000);
         }
 
-        function getApiKey() {
-            const inputVal = document.getElementById('apiKeyInput')?.value?.trim();
+        // Places API Key Functions
+        function getPlacesApiKey() {
+            const inputVal = document.getElementById('placesApiKeyInput')?.value?.trim();
+            const storedVal = localStorage.getItem('google_places_api_key') || localStorage.getItem('google_maps_api_key');
+            return inputVal || storedVal || '';
+        }
+
+        function savePlacesApiKey(key) {
+            if (key) {
+                const trimmed = key.trim();
+                localStorage.setItem('google_places_api_key', trimmed);
+                localStorage.setItem('google_maps_api_key', trimmed);
+            } else {
+                localStorage.removeItem('google_places_api_key');
+                localStorage.removeItem('google_maps_api_key');
+            }
+        }
+
+        // Gemini AI Studio API Key Functions
+        function getGeminiApiKey() {
+            const inputVal = document.getElementById('geminiApiKeyInput')?.value?.trim();
             const storedVal = localStorage.getItem('gemini_api_key');
             return inputVal || storedVal || '';
         }
 
-        function saveApiKey(key) {
+        function saveGeminiApiKey(key) {
             if (key) {
-                localStorage.setItem('gemini_api_key', key.trim());
+                const trimmed = key.trim();
+                localStorage.setItem('gemini_api_key', trimmed);
             } else {
                 localStorage.removeItem('gemini_api_key');
             }
         }
 
-        function initApiKeyInput() {
-            const savedKey = localStorage.getItem('gemini_api_key');
-            const input = document.getElementById('apiKeyInput');
-            if (input && savedKey) {
-                input.value = savedKey;
+        function initApiKeyInputs() {
+            const placesKey = localStorage.getItem('google_places_api_key') || localStorage.getItem('google_maps_api_key');
+            const geminiKey = localStorage.getItem('gemini_api_key');
+
+            const placesInput = document.getElementById('placesApiKeyInput');
+            const geminiInput = document.getElementById('geminiApiKeyInput');
+
+            if (placesInput && placesKey) {
+                placesInput.value = placesKey;
+            }
+            if (geminiInput && geminiKey) {
+                geminiInput.value = geminiKey;
             }
         }
 
@@ -799,13 +901,14 @@
                             ? top.semanticType 
                             : (top.name || top.placeID || top.address || '訪問場所');
                         placeName = normalizeProtectedName(placeName);
-                        const isPlaceId = isPlaceIdString(placeName) || isPlaceIdString(top.placeID);
+                        const targetPlaceId = top.placeID || top.placeId || (isPlaceIdString(placeName) ? placeName : '');
+                        const isPlaceId = isPlaceIdString(placeName) || isPlaceIdString(targetPlaceId);
 
                         parsedEvents.push({
                             id: `json-v-${idx}`,
                             type: 'PLACE',
                             title: placeName,
-                            placeId: top.placeID || top.placeId || '',
+                            placeId: targetPlaceId,
                             isPlaceIdOnly: isPlaceId,
                             address: top.address || '',
                             startTime: startTime,
@@ -1000,7 +1103,6 @@
             sortedDates.forEach(dStr => {
                 const opt = document.createElement('option');
                 opt.value = dStr;
-                // Parse date in local timezone to get precise day of week
                 const d = new Date(dStr + 'T00:00:00');
                 const dayName = dayOfWeekNames[d.getDay()];
                 opt.textContent = `${dStr}-${dayName}(${dateMap[dStr]}件のイベント)`;
@@ -1056,10 +1158,10 @@
 
         function updatePlaceIdCountBadge() {
             const countBadge = document.getElementById('placeIdCountBadge');
-            const targets = filteredEvents.filter(e => !isProtectedName(e.title) && (e.isPlaceIdOnly || e.title === '訪問場所' || e.title.startsWith('ChIJ') || e.title.startsWith('0x')));
+            const targets = filteredEvents.filter(e => !isProtectedName(e.title) && (e.isPlaceIdOnly || e.title === '訪問場所' || e.title.startsWith('ChIJ') || e.title.startsWith('0x') || (e.placeId && e.placeId.length > 5)));
             if (countBadge) countBadge.textContent = `${targets.length} 件検出`;
             
-            const btn = document.getElementById('resolvePlaceNamesBtn');
+            const btn = document.getElementById('resolvePlacesBtn');
             if (btn) btn.disabled = targets.length === 0;
         }
 
@@ -1194,7 +1296,6 @@
             showToast('サンプルデータをロードしました！', 'success');
         }
 
-        // 場所名（スポット名）のクイック手直し
         function quickEditTitle(id) {
             const ev = rawEvents.find(item => item.id === id);
             if (!ev) return;
@@ -1209,7 +1310,6 @@
             }
         }
 
-        // 詳細編集モーダルの表示制御
         function openEditModal(id) {
             const ev = rawEvents.find(item => item.id === id);
             if (!ev) return;
@@ -1262,98 +1362,127 @@
             }
         }
 
-        async function resolvePlaceNamesWithAI() {
-            const apiKey = getApiKey();
+        /**
+         * Google Places API (New) を使った店名特定関数
+         * - X-Goog-FieldMask で Basic フィールド（displayName, formattedAddress）のみ指定し最小課金
+         * - localStorage によるキャッシュ機能で、重複 Place ID への通信を 0 回化
+         */
+        async function resolvePlaceNamesWithPlacesAPI() {
+            const apiKey = getPlacesApiKey();
             if (!apiKey) {
-                showToast('Gemini API キーを入力してください。', 'error');
-                const keyInput = document.getElementById('apiKeyInput');
+                showToast('Google Maps Places API Key を入力してください。', 'error');
+                const keyInput = document.getElementById('placesApiKeyInput');
                 if (keyInput) keyInput.focus();
                 return;
             }
 
-            const targets = filteredEvents.filter(e => !isProtectedName(e.title) && (e.isPlaceIdOnly || e.title === '訪問場所' || e.title.startsWith('ChIJ') || e.title.startsWith('0x')));
+            const targets = filteredEvents.filter(e => !isProtectedName(e.title) && (e.isPlaceIdOnly || e.title === '訪問場所' || e.title.startsWith('ChIJ') || e.title.startsWith('0x') || (e.placeId && e.placeId.length > 5)));
             if (targets.length === 0) {
                 showToast('補完対象の場所（Place ID や未判定の場所）はありません。', 'info');
                 return;
             }
 
-            const btn = document.getElementById('resolvePlaceNamesBtn');
+            const btn = document.getElementById('resolvePlacesBtn');
             if (btn) {
                 btn.disabled = true;
-                btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Gemini AI で店名を探索中...`;
+                btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Places API で特定中...`;
                 lucide.createIcons();
             }
 
+            const cache = getPlacesCache();
+            let cacheHitCount = 0;
+            let apiCallCount = 0;
+            let successCount = 0;
+
+            pushHistoryState('Places APIによる店名特定');
+
             try {
-                const targetItems = targets.map(t => ({
-                    id: t.id,
-                    placeId: t.placeId || t.title,
-                    lat: t.lat,
-                    lng: t.lng,
-                    address: t.address || ''
-                }));
+                for (let i = 0; i < targets.length; i++) {
+                    const ev = targets[i];
+                    const placeId = ev.placeId || (isPlaceIdString(ev.title) ? ev.title : '');
 
-                const prompt = `以下の位置情報（Place ID / 緯度・経度 / 住所）に対応する実際の店舗名・スポット名と正確な住所を特定してください。
-Google 検索を行い、最も正確な日本語の名称を提示してください。
+                    if (!placeId) {
+                        // Place IDが無い場合はスキップまたは必要に応じて経緯度検索
+                        continue;
+                    }
 
-【入力リスト】:
-${JSON.stringify(targetItems, null, 2)}
+                    // 1. ローカルキャッシュのチェック (0リクエスト)
+                    if (cache[placeId] && cache[placeId].name) {
+                        ev.title = cache[placeId].name;
+                        if (cache[placeId].address) ev.address = cache[placeId].address;
+                        ev.isPlaceIdOnly = false;
+                        cacheHitCount++;
+                        successCount++;
+                        continue;
+                    }
 
-【返答フォーマット】:
-必ず以下の JSON 配列形式のみで回答してください:
-[
-  {
-    "id": "イベントID",
-    "name": "特定された店舗名・施設名",
-    "address": "特定された住所"
-  }
-]`;
+                    // 2. Google Places API (New) - Place Details 呼び出し
+                    // フィールドマスク: id, displayName, formattedAddress (Basic情報のみ)
+                    try {
+                        const url = `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`;
+                        const resp = await fetch(url, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Goog-Api-Key': apiKey,
+                                'X-Goog-FieldMask': 'id,displayName,formattedAddress'
+                            }
+                        });
 
-                const aiResponseText = await callGeminiApiWithFallback(prompt, apiKey, true);
-                
-                let resolvedList = [];
-                try {
-                    resolvedList = JSON.parse(aiResponseText);
-                } catch (pe) {
-                    const jsonMatch = aiResponseText.match(/\[[\s\S]*\]/);
-                    if (jsonMatch) {
-                        resolvedList = JSON.parse(jsonMatch[0]);
+                        apiCallCount++;
+
+                        if (resp.ok) {
+                            const data = await resp.json();
+                            const fetchedName = data.displayName?.text;
+                            const fetchedAddress = data.formattedAddress;
+
+                            if (fetchedName) {
+                                ev.title = fetchedName;
+                                if (fetchedAddress) ev.address = fetchedAddress;
+                                ev.isPlaceIdOnly = false;
+                                successCount++;
+
+                                // キャッシュに保存
+                                setPlacesCache(placeId, {
+                                    name: fetchedName,
+                                    address: fetchedAddress || ''
+                                });
+                            }
+                        } else {
+                            console.warn(`Places API call failed for ${placeId}: ${resp.status}`);
+                        }
+                    } catch (err) {
+                        console.error(`Error fetching Place ID ${placeId}:`, err);
+                    }
+
+                    // レートリミット回避用の軽微なウェイト
+                    if (apiCallCount % 5 === 0) {
+                        await new Promise(r => setTimeout(r, 100));
                     }
                 }
 
-                if (Array.isArray(resolvedList) && resolvedList.length > 0) {
-                    let updatedCount = 0;
-                    pushHistoryState('AIによるスポット名一括置換');
-                    resolvedList.forEach(item => {
-                        const targetEv = rawEvents.find(e => e.id === item.id);
-                        if (targetEv && item.name) {
-                            targetEv.title = item.name;
-                            if (item.address) targetEv.address = item.address;
-                            targetEv.isPlaceIdOnly = false;
-                            updatedCount++;
-                        }
-                    });
+                applyFilters();
 
-                    applyFilters();
-                    showToast(`${updatedCount} 件のスポット名を AI で補完・特定しました！`, 'success');
-                } else {
-                    showToast('スポット名の特定結果を取得できませんでした。', 'error');
+                let msg = `${successCount} 件の店名を特定しました！`;
+                if (cacheHitCount > 0 || apiCallCount > 0) {
+                    msg += ` (キャッシュ活用: ${cacheHitCount}件, APIリクエスト: ${apiCallCount}件)`;
                 }
+                showToast(msg, 'success');
+
             } catch (err) {
                 console.error("Resolve Place Names Error:", err);
-                showToast(`スポット名特定エラー: ${err.message}`, 'error');
+                showToast(`エラーが発生しました: ${err.message}`, 'error');
             } finally {
                 if (btn) {
                     btn.disabled = false;
-                    btn.innerHTML = `<i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Gemini AI (位置＋Web検索) で店名特定`;
+                    btn.innerHTML = `<i data-lucide="search" class="w-3.5 h-3.5"></i> Places API (Basic) で店名取得`;
                     lucide.createIcons();
                 }
             }
         }
 
         async function callGeminiApiWithFallback(promptText, apiKey, expectJson = false) {
-            // Use active model identifiers
-            const models = ['gemini-3.6-flash', 'gemini-3.6-pro', 'gemini-2.5-pro'];
+            const models = ['gemini-3.6-flash', 'gemini-3.1-pro-preview', 'gemini-2.5-flash'];
             const errors = [];
             const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -1378,11 +1507,15 @@ ${JSON.stringify(targetItems, null, 2)}
                                 body: JSON.stringify(payload)
                             });
 
-                            // Handle transient errors (503 High Demand, 429 Rate Limit, 5xx Server Errors) with retry delay
+                            if (resp.status === 403) {
+                                const errData = await resp.json().catch(() => ({}));
+                                const msg = errData.error?.message || '';
+                                throw new Error(`[403 権限エラー] Gemini API (Generative Language API) が有効化されていません。Google AI Studio (https://aistudio.google.com/app/apikey) で無料発行したキーを入力するか、GCPコンソールで Generative Language API を有効にしてください。\n詳細: ${msg}`);
+                            }
+
                             if (resp.status === 503 || resp.status === 429 || resp.status >= 500) {
                                 const errText = await resp.text();
                                 if (attempt < maxRetries - 1) {
-                                    console.warn(`[${model}] Temporary error ${resp.status}, retrying (${attempt + 1}/${maxRetries}) in ${(attempt + 1) * 1200}ms...`);
                                     await delay((attempt + 1) * 1200);
                                     continue;
                                 }
@@ -1398,13 +1531,14 @@ ${JSON.stringify(targetItems, null, 2)}
                             const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                             if (text) return text;
                         } catch (err) {
-                            // Don't retry if the model endpoint itself is missing/404
+                            if (err.message && err.message.includes('403')) {
+                                throw err;
+                            }
                             if (err.message && err.message.includes('404')) {
                                 errors.push(err.message);
                                 break;
                             }
                             if (attempt === maxRetries - 1) {
-                                console.warn(`Gemini Model ${model} attempt failed:`, err);
                                 errors.push(err.message || String(err));
                             }
                         }
@@ -1417,10 +1551,10 @@ ${JSON.stringify(targetItems, null, 2)}
         async function generateAISummary() {
             if (filteredEvents.length === 0) return;
 
-            const apiKey = getApiKey();
+            const apiKey = getGeminiApiKey();
             if (!apiKey) {
-                showToast('Gemini API キーを入力してください。', 'error');
-                const keyInput = document.getElementById('apiKeyInput');
+                showToast('Google AI Studio Key を入力してください。', 'error');
+                const keyInput = document.getElementById('geminiApiKeyInput');
                 if (keyInput) keyInput.focus();
                 return;
             }
@@ -1526,10 +1660,10 @@ ${JSON.stringify(summaryList, null, 2)}
             icsContent.push('END:VCALENDAR');
 
             const blob = new Blob([icsContent.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
+            const link = document.getElementById('exportIcsBtn');
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.href = URL.createObjectURL(blob);
 
-            // Determine output filename based on date filter or active event range
             const startDateVal = document.getElementById('filterStartDate')?.value;
             const endDateVal = document.getElementById('filterEndDate')?.value;
             let filename = '';
@@ -1548,10 +1682,10 @@ ${JSON.stringify(summaryList, null, 2)}
                 filename = `timeline-calendar-${new Date().toISOString().slice(0,10)}.ics`;
             }
 
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            downloadAnchor.download = filename;
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            document.body.removeChild(downloadAnchor);
 
             showToast(`${filteredEvents.length} 件のイベントを .ics に出力しました！`, 'success');
         }
