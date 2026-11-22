@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Timeline to Calendar - Googleマップタイムライン変換ツール</title>
+    <title>Timeline to Calendar Ver4 - Googleマップタイムライン変換ツール</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -47,6 +47,21 @@
     <!-- Toast Notification Container -->
     <div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
 
+    <!-- Custom Confirm Modal (Replaces native confirm) -->
+    <div id="confirmModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4">
+            <h3 id="confirmModalTitle" class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <i data-lucide="alert-circle" class="w-4 h-4 text-amber-500"></i>
+                <span>確認</span>
+            </h3>
+            <p id="confirmModalMessage" class="text-xs text-slate-600 leading-relaxed"></p>
+            <div class="flex justify-end gap-2 pt-2">
+                <button id="confirmCancelBtn" class="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors">キャンセル</button>
+                <button id="confirmOkBtn" class="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-colors">実行する</button>
+            </div>
+        </div>
+    </div>
+
     <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
             <div class="flex items-center gap-3">
@@ -54,7 +69,10 @@
                     <i data-lucide="calendar-range" class="w-5 h-5"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-slate-900 text-lg leading-tight">Timeline to Calendar Ver3</h1>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-bold text-slate-900 text-lg leading-tight">Timeline to Calendar Ver4</h1>
+                        <span class="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-200">Ver 4</span>
+                    </div>
                     <p class="text-xs text-slate-500">Googleマップの移動履歴をGoogleカレンダー用 `.ics` へ一括変換 (Places API連動)</p>
                 </div>
             </div>
@@ -146,6 +164,14 @@
                         <label class="flex items-center gap-2 text-slate-700 cursor-pointer">
                             <input type="checkbox" id="filterActivities" checked onchange="applyFilters()" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4">
                             <span class="font-medium">移動アクティビティを含める</span>
+                        </label>
+                        <!-- Ver 4 New Feature: Exclude Home & Work -->
+                        <label class="flex items-center gap-2 text-slate-700 cursor-pointer pt-1 border-t border-slate-100">
+                            <input type="checkbox" id="filterExcludeHomeWork" onchange="applyFilters()" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                            <span class="font-medium flex items-center gap-1.5">
+                                自宅と会社を除く
+                                <span class="text-[9px] bg-indigo-50 text-indigo-600 border border-indigo-200 px-1.5 py-0.2 rounded font-semibold">New</span>
+                            </span>
                         </label>
                     </div>
 
@@ -347,15 +373,15 @@
         </div>
     </main>
 
-    <!-- Modal Dialog for Input Prompt -->
+    <!-- Modal Dialog for Input Prompt (Replaces native prompt) -->
     <div id="modalOverlay" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in duration-150">
+        <div class="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
             <h3 id="modalTitle" class="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <i data-lucide="key" class="w-4 h-4 text-indigo-600"></i>
-                <span id="modalTitleText">入力が必要です</span>
+                <i data-lucide="pencil" class="w-4 h-4 text-indigo-600"></i>
+                <span id="modalTitleText">場所名の編集</span>
             </h3>
             <p id="modalMessage" class="text-xs text-slate-600 leading-relaxed"></p>
-            <input type="text" id="modalInput" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono">
+            <input type="text" id="modalInput" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             <div class="flex justify-end gap-2 pt-2">
                 <button onclick="closeModal(false)" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors">キャンセル</button>
                 <button onclick="closeModal(true)" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors">確定</button>
@@ -365,7 +391,7 @@
 
     <!-- Edit Event Modal -->
     <div id="editEventModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in duration-150">
+        <div class="bg-white rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-4">
             <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                 <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
                     <i data-lucide="pencil-line" class="w-4 h-4 text-indigo-600"></i>
@@ -421,8 +447,19 @@
         const MAX_HISTORY = 30;
         let isInternalStateChange = false;
 
-        // Sample Demonstration Data
+        // Sample Demonstration Data (Includes Home and Work for Ver 4 Filter testing)
         const SAMPLE_DATA = [
+            {
+                id: "ev-0",
+                type: "PLACE",
+                title: "自宅",
+                address: "東京都世田谷区三軒茶屋",
+                startTime: new Date("2026-08-09T07:00:00"),
+                endTime: new Date("2026-08-09T08:45:00"),
+                lat: 35.6436,
+                lng: 139.6710,
+                confidence: "HIGH"
+            },
             {
                 id: "ev-1",
                 type: "PLACE",
@@ -473,11 +510,22 @@
                 id: "ev-5",
                 type: "PLACE",
                 title: "新宿御苑",
-                address: "東京都新宿区内内藤町11",
+                address: "東京都新宿区内藤町11",
                 startTime: new Date("2026-08-09T14:15:00"),
                 endTime: new Date("2026-08-09T16:30:00"),
                 lat: 35.6852,
                 lng: 139.7101,
+                confidence: "HIGH"
+            },
+            {
+                id: "ev-6",
+                type: "PLACE",
+                title: "会社",
+                address: "東京都千代田区丸の内1丁目",
+                startTime: new Date("2026-08-09T17:00:00"),
+                endTime: new Date("2026-08-09T19:00:00"),
+                lat: 35.6812,
+                lng: 139.7671,
                 confidence: "HIGH"
             }
         ];
@@ -489,6 +537,71 @@
             initApiKeyInputs();
             updatePlacesCacheCountUI();
         });
+
+        // Custom Confirm Dialog (Replaces browser confirm())
+        function showCustomConfirm(message, title = '確認') {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('confirmModal');
+                const titleEl = document.getElementById('confirmModalTitle').querySelector('span');
+                const msgEl = document.getElementById('confirmModalMessage');
+                const okBtn = document.getElementById('confirmOkBtn');
+                const cancelBtn = document.getElementById('confirmCancelBtn');
+
+                titleEl.textContent = title;
+                msgEl.textContent = message;
+                modal.classList.remove('hidden');
+
+                const cleanup = (result) => {
+                    modal.classList.add('hidden');
+                    okBtn.onclick = null;
+                    cancelBtn.onclick = null;
+                    resolve(result);
+                };
+
+                okBtn.onclick = () => cleanup(true);
+                cancelBtn.onclick = () => cleanup(false);
+            });
+        }
+
+        // Custom Prompt Dialog (Replaces browser prompt())
+        function showCustomPrompt(message, defaultValue = '', title = '場所名の編集') {
+            return new Promise((resolve) => {
+                const overlay = document.getElementById('modalOverlay');
+                const titleText = document.getElementById('modalTitleText');
+                const msgEl = document.getElementById('modalMessage');
+                const inputEl = document.getElementById('modalInput');
+
+                titleText.textContent = title;
+                msgEl.textContent = message;
+                inputEl.value = defaultValue;
+                overlay.classList.remove('hidden');
+                inputEl.focus();
+                inputEl.select();
+
+                modalResolver = resolve;
+
+                inputEl.onkeydown = (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        closeModal(true);
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        closeModal(false);
+                    }
+                };
+            });
+        }
+
+        function closeModal(result) {
+            const overlay = document.getElementById('modalOverlay');
+            const inputEl = document.getElementById('modalInput');
+            if (overlay) overlay.classList.add('hidden');
+            if (inputEl) inputEl.onkeydown = null;
+            if (modalResolver) {
+                modalResolver(result ? inputEl.value : null);
+                modalResolver = null;
+            }
+        }
 
         // Local Storage Cache Management for Google Places API
         const PLACES_CACHE_KEY = 'google_places_api_cache_v1';
@@ -524,8 +637,9 @@
             if (label) label.textContent = `キャッシュ保存数: ${count}件`;
         }
 
-        function clearPlacesCache() {
-            if (confirm('ローカルに保存されている Places API のキャッシュを消去しますか？')) {
+        async function clearPlacesCache() {
+            const confirmed = await showCustomConfirm('ローカルに保存されている Places API のキャッシュを消去しますか？', 'キャッシュの消去');
+            if (confirmed) {
                 localStorage.removeItem(PLACES_CACHE_KEY);
                 updatePlacesCacheCountUI();
                 showToast('Places API キャッシュを消去しました。', 'info');
@@ -1052,8 +1166,8 @@
         function normalizeProtectedName(name) {
             if (!name) return '訪問場所';
             const upper = String(name).toUpperCase().trim();
-            if (upper === 'HOME' || upper === 'HOME_LOCATION' || name === '自宅') return '自宅';
-            if (upper === 'WORK' || upper === 'WORK_LOCATION' || name === '会社' || name === '職場') return '会社';
+            if (upper === 'HOME' || upper === 'HOME_LOCATION' || name.trim() === '自宅') return '自宅';
+            if (upper === 'WORK' || upper === 'WORK_LOCATION' || name.trim() === '会社' || name.trim() === '職場') return '会社';
             return name;
         }
 
@@ -1133,12 +1247,18 @@
         function applyFilters() {
             const showPlaces = document.getElementById('filterPlaces')?.checked ?? true;
             const showActivities = document.getElementById('filterActivities')?.checked ?? true;
+            const excludeHomeWork = document.getElementById('filterExcludeHomeWork')?.checked ?? false;
             const startDateVal = document.getElementById('filterStartDate')?.value;
             const endDateVal = document.getElementById('filterEndDate')?.value;
 
             filteredEvents = rawEvents.filter(e => {
                 if (e.type === 'PLACE' && !showPlaces) return false;
                 if (e.type === 'ACTIVITY' && !showActivities) return false;
+
+                // Ver 4: 自宅と会社を除くフィルター
+                if (excludeHomeWork && isProtectedName(e.title)) {
+                    return false;
+                }
 
                 const dateStr = e.startTime.toISOString().split('T')[0];
                 if (startDateVal && dateStr < startDateVal) return false;
@@ -1200,8 +1320,11 @@
                 const startStr = e.startTime ? e.startTime.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
                 const endStr = e.endTime ? e.endTime.toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '';
                 const isPlace = e.type === 'PLACE';
-                const icon = isPlace ? 'map-pin' : 'navigation';
-                const badgeBg = isPlace ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                const isProtected = isProtectedName(e.title);
+                const icon = isProtected ? (normalizeProtectedName(e.title) === '自宅' ? 'home' : 'building-2') : (isPlace ? 'map-pin' : 'navigation');
+                const badgeBg = isProtected 
+                    ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                    : (isPlace ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200');
 
                 return `
                     <div onclick="focusEvent('${e.id}')" class="bg-slate-50 hover:bg-indigo-50/50 p-3 rounded-xl border border-slate-200 hover:border-indigo-300 transition-all cursor-pointer flex items-center justify-between gap-3 group">
@@ -1215,6 +1338,7 @@
                                         <span>${escapeHtml(e.title)}</span>
                                         <i data-lucide="pencil" class="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity"></i>
                                     </h4>
+                                    ${isProtected ? '<span class="text-[9px] bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded font-semibold">登録場所</span>' : ''}
                                     ${e.confidence === 'HIGH' ? '<span class="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.2 rounded">確定</span>' : ''}
                                 </div>
                                 ${e.address ? `<p class="text-[11px] text-slate-500 truncate mt-0.5">${escapeHtml(e.address)}</p>` : ''}
@@ -1293,17 +1417,17 @@
             }));
             populateDateQuickSelect();
             applyFilters();
-            showToast('サンプルデータをロードしました！', 'success');
+            showToast('サンプルデータをロードしました！（自宅・会社データを含む）', 'success');
         }
 
-        function quickEditTitle(id) {
+        async function quickEditTitle(id) {
             const ev = rawEvents.find(item => item.id === id);
             if (!ev) return;
 
-            const newTitle = prompt('新しい場所名・スポット名を入力してください:', ev.title);
+            const newTitle = await showCustomPrompt('新しい場所名・スポット名を入力してください:', ev.title, '場所名の手直し');
             if (newTitle !== null && newTitle.trim() !== '' && newTitle.trim() !== ev.title) {
                 pushHistoryState('場所名の手直し');
-                ev.title = newTitle.trim();
+                ev.title = normalizeProtectedName(newTitle.trim());
                 ev.isPlaceIdOnly = false;
                 applyFilters();
                 showToast(`場所名を「${ev.title}」に更新しました。`, 'success');
@@ -1341,7 +1465,7 @@
 
             if (ev) {
                 pushHistoryState('ログ情報の編集');
-                ev.title = document.getElementById('editEventTitle').value;
+                ev.title = normalizeProtectedName(document.getElementById('editEventTitle').value);
                 ev.address = document.getElementById('editEventAddress').value;
                 ev.startTime = new Date(document.getElementById('editEventStart').value);
                 ev.endTime = new Date(document.getElementById('editEventEnd').value);
@@ -1353,8 +1477,9 @@
             }
         }
 
-        function deleteEvent(id) {
-            if (confirm('このログ項目を削除しますか？')) {
+        async function deleteEvent(id) {
+            const confirmed = await showCustomConfirm('このログ項目を削除しますか？', '項目の削除');
+            if (confirmed) {
                 pushHistoryState('ログ項目の削除');
                 rawEvents = rawEvents.filter(e => e.id !== id);
                 applyFilters();
@@ -1364,8 +1489,6 @@
 
         /**
          * Google Places API (New) を使った店名特定関数
-         * - X-Goog-FieldMask で Basic フィールド（displayName, formattedAddress）のみ指定し最小課金
-         * - localStorage によるキャッシュ機能で、重複 Place ID への通信を 0 回化
          */
         async function resolvePlaceNamesWithPlacesAPI() {
             const apiKey = getPlacesApiKey();
@@ -1401,12 +1524,9 @@
                     const ev = targets[i];
                     const placeId = ev.placeId || (isPlaceIdString(ev.title) ? ev.title : '');
 
-                    if (!placeId) {
-                        // Place IDが無い場合はスキップまたは必要に応じて経緯度検索
-                        continue;
-                    }
+                    if (!placeId) continue;
 
-                    // 1. ローカルキャッシュのチェック (0リクエスト)
+                    // 1. ローカルキャッシュのチェック
                     if (cache[placeId] && cache[placeId].name) {
                         ev.title = cache[placeId].name;
                         if (cache[placeId].address) ev.address = cache[placeId].address;
@@ -1416,8 +1536,7 @@
                         continue;
                     }
 
-                    // 2. Google Places API (New) - Place Details 呼び出し
-                    // フィールドマスク: id, displayName, formattedAddress (Basic情報のみ)
+                    // 2. Google Places API (New) 呼び出し
                     try {
                         const url = `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`;
                         const resp = await fetch(url, {
@@ -1442,7 +1561,6 @@
                                 ev.isPlaceIdOnly = false;
                                 successCount++;
 
-                                // キャッシュに保存
                                 setPlacesCache(placeId, {
                                     name: fetchedName,
                                     address: fetchedAddress || ''
@@ -1455,7 +1573,6 @@
                         console.error(`Error fetching Place ID ${placeId}:`, err);
                     }
 
-                    // レートリミット回避用の軽微なウェイト
                     if (apiCallCount % 5 === 0) {
                         await new Promise(r => setTimeout(r, 100));
                     }
@@ -1510,7 +1627,7 @@
                             if (resp.status === 403) {
                                 const errData = await resp.json().catch(() => ({}));
                                 const msg = errData.error?.message || '';
-                                throw new Error(`[403 権限エラー] Gemini API (Generative Language API) が有効化されていません。Google AI Studio (https://aistudio.google.com/app/apikey) で無料発行したキーを入力するか、GCPコンソールで Generative Language API を有効にしてください。\n詳細: ${msg}`);
+                                throw new Error(`[403 権限エラー] Gemini API (Generative Language API) が有効化されていません。Google AI Studio で無料発行したキーを入力するか、GCPコンソールで Generative Language API を有効にしてください。\n詳細: ${msg}`);
                             }
 
                             if (resp.status === 503 || resp.status === 429 || resp.status >= 500) {
@@ -1660,7 +1777,6 @@ ${JSON.stringify(summaryList, null, 2)}
             icsContent.push('END:VCALENDAR');
 
             const blob = new Blob([icsContent.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
-            const link = document.getElementById('exportIcsBtn');
             const downloadAnchor = document.createElement('a');
             downloadAnchor.href = URL.createObjectURL(blob);
 
@@ -1688,15 +1804,6 @@ ${JSON.stringify(summaryList, null, 2)}
             document.body.removeChild(downloadAnchor);
 
             showToast(`${filteredEvents.length} 件のイベントを .ics に出力しました！`, 'success');
-        }
-
-        function closeModal(result) {
-            const overlay = document.getElementById('modalOverlay');
-            if (overlay) overlay.classList.add('hidden');
-            if (modalResolver) {
-                modalResolver(result ? document.getElementById('modalInput').value : null);
-                modalResolver = null;
-            }
         }
     </script>
 </body>
